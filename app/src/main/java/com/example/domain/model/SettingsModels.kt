@@ -37,7 +37,6 @@ data class UserPreferences(
     val isSecretPinConfigured: Boolean = false,
     val secretBiometricEnabled: Boolean = false,
     val secretAutoLockEnabled: Boolean = true,
-    val appGeneratedInstanceId: String = "",
 )
 
 data class DeviceInfoSnapshot(
@@ -56,12 +55,12 @@ data class DeviceInfoSnapshot(
     val timeZoneDisplay: String,
     val availableStorageBytes: Long?,
     val totalStorageBytes: Long?,
-    val appGeneratedWorkspaceId: String,
 )
 
 @Serializable
 data class WorkspaceExportItem(
     val name: String,
+    val generatedWorkspaceId: String? = null,
     val packageName: String? = null,
     val appDisplayName: String? = null,
     val description: String = "",

@@ -201,8 +201,13 @@ fun ResetWorkspaceDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "This clears the workspace description, notes, and launch counter stored in Nova Space. The workspace record itself is preserved and no external apps are modified.",
+                    text = "This resets only \"$workspaceName\" inside Nova Space: clearing its description, notes, accent color, pinned state, and launch counter, and generating a new Workspace ID. Other Workspaces are unaffected.",
                     style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = "It does not reset any external installed app's data, cache, login session, hardware identity, or Android sandbox.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NovaTheme.colors.secondaryText,
                 )
                 if (hasLinkedApp) {
                     Row(
@@ -233,7 +238,7 @@ fun ResetWorkspaceDialog(
                 ),
                 modifier = Modifier.testTag("confirm_reset_workspace_button"),
             ) {
-                Text("Reset Content")
+                Text("Reset Workspace")
             }
         },
         dismissButton = {

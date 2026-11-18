@@ -8,6 +8,7 @@ import com.example.domain.model.WorkspaceAccent
 @Entity(tableName = "workspaces")
 data class WorkspaceEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val generatedWorkspaceId: String = "",
     val name: String,
     val packageName: String? = null,
     val appDisplayName: String? = null,
@@ -23,6 +24,7 @@ data class WorkspaceEntity(
 
 fun WorkspaceEntity.toDomain(): Workspace = Workspace(
     id = id,
+    generatedWorkspaceId = generatedWorkspaceId,
     name = name,
     packageName = packageName,
     appDisplayName = appDisplayName,
@@ -38,6 +40,7 @@ fun WorkspaceEntity.toDomain(): Workspace = Workspace(
 
 fun Workspace.toEntity(): WorkspaceEntity = WorkspaceEntity(
     id = id,
+    generatedWorkspaceId = generatedWorkspaceId,
     name = name,
     packageName = packageName,
     appDisplayName = appDisplayName,

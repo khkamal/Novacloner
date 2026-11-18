@@ -4,10 +4,13 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+import java.util.UUID
 
 @Database(
     entities = [WorkspaceEntity::class, SecretRecordEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class NovaSpaceDatabase : RoomDatabase() {
@@ -16,6 +19,29 @@ abstract class NovaSpaceDatabase : RoomDatabase() {
 
     companion object {
         private const val DATABASE_NAME = "nova_space.db"
+
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE workspaces ADD COLUMN generatedWorkspaceId TEXT NOT NULL DEFAULT ''"
+                )
+                val ids = mutableListOf<Long>()
+                db.query("SELECT id FROM workspaces").use { cursor ->
+                    val idIndex = cursor.getColumnIndex("id")
+                    while (cursor.moveToNext()) {
+                        if (idIndex >= 0) {
+                            ids.add(cursor.getLong(idIndex))
+                        }
+                    }
+                }
+                for (rowId in ids) {
+                    db.execSQL(
+                        "UPDATE workspaces SET generatedWorkspaceId = ? WHERE id = ?",
+                        arrayOf<Any>(UUID.randomUUID().toString(), rowId),
+                    )
+                }
+            }
+        }
 
         @Volatile
         private var INSTANCE: NovaSpaceDatabase? = null
@@ -27,7 +53,7 @@ abstract class NovaSpaceDatabase : RoomDatabase() {
                     NovaSpaceDatabase::class.java,
                     DATABASE_NAME
                 )
-                    // Future schema versions must register explicit Migration(from, to) objects here.
+                    .addMigrations(MIGRATION_1_2)
                     .build()
                     .also { INSTANCE = it }
             }

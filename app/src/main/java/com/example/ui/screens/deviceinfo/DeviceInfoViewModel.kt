@@ -48,17 +48,6 @@ class DeviceInfoViewModel(
         }
     }
 
-    fun regenerateAppWorkspaceId() {
-        viewModelScope.launch {
-            val newId = deviceInfoRepository.regenerateAppGeneratedWorkspaceId()
-            _uiState.update { state ->
-                state.copy(
-                    snapshot = state.snapshot?.copy(appGeneratedWorkspaceId = newId)
-                )
-            }
-        }
-    }
-
     class Factory(
         private val deviceInfoRepository: DeviceInfoRepository,
     ) : ViewModelProvider.Factory {

@@ -242,7 +242,7 @@ fun PrivacyScreen(
                 )
                 PrivacyPointCard(
                     title = "No Hardware Identifier Access",
-                    body = "Restricted identifiers such as IMEI, SIM serial numbers, and MAC addresses are never accessed or spoofed. The workspace ID on the Device Info screen is an app-generated random UUID."
+                    body = "Restricted identifiers such as IMEI, SIM serial numbers, and MAC addresses are never accessed or spoofed. Each Workspace has its own app-generated random UUID stored locally inside Nova Space; regenerating or deleting one Workspace affects only that Workspace."
                 )
             }
         }

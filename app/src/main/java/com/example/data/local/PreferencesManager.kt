@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.io.IOException
-import java.util.UUID
 
 private val Context.novaSpaceDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "nova_space_preferences"
@@ -36,7 +35,6 @@ class PreferencesManager(private val context: Context) {
         val SECRET_PIN_SALT = stringPreferencesKey("secret_pin_salt")
         val SECRET_BIOMETRIC_ENABLED = booleanPreferencesKey("secret_biometric_enabled")
         val SECRET_AUTO_LOCK_ENABLED = booleanPreferencesKey("secret_auto_lock_enabled")
-        val APP_GENERATED_INSTANCE_ID = stringPreferencesKey("app_generated_instance_id")
     }
 
     val userPreferences: Flow<UserPreferences> = context.novaSpaceDataStore.data
@@ -58,7 +56,6 @@ class PreferencesManager(private val context: Context) {
                 isSecretPinConfigured = !hash.isNullOrBlank() && !salt.isNullOrBlank(),
                 secretBiometricEnabled = prefs[Keys.SECRET_BIOMETRIC_ENABLED] ?: false,
                 secretAutoLockEnabled = prefs[Keys.SECRET_AUTO_LOCK_ENABLED] ?: true,
-                appGeneratedInstanceId = prefs[Keys.APP_GENERATED_INSTANCE_ID].orEmpty(),
             )
         }
 
@@ -110,25 +107,5 @@ class PreferencesManager(private val context: Context) {
             prefs.remove(Keys.SECRET_PIN_SALT)
             prefs[Keys.SECRET_BIOMETRIC_ENABLED] = false
         }
-    }
-
-    suspend fun getOrCreateAppGeneratedInstanceId(): String {
-        val current = context.novaSpaceDataStore.data.first()[Keys.APP_GENERATED_INSTANCE_ID]
-        if (!current.isNullOrBlank()) {
-            return current
-        }
-        val generated = UUID.randomUUID().toString()
-        context.novaSpaceDataStore.edit { prefs ->
-            prefs[Keys.APP_GENERATED_INSTANCE_ID] = generated
-        }
-        return generated
-    }
-
-    suspend fun regenerateAppGeneratedInstanceId(): String {
-        val generated = UUID.randomUUID().toString()
-        context.novaSpaceDataStore.edit { prefs ->
-            prefs[Keys.APP_GENERATED_INSTANCE_ID] = generated
-        }
-        return generated
     }
 }

@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.StatFs
-import com.example.data.local.PreferencesManager
 import com.example.domain.model.DeviceInfoSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -13,7 +12,6 @@ import java.util.TimeZone
 
 class DeviceInfoRepository(
     private val context: Context,
-    private val preferencesManager: PreferencesManager,
 ) {
 
     suspend fun getDeviceInfoSnapshot(): DeviceInfoSnapshot = withContext(Dispatchers.IO) {
@@ -47,7 +45,6 @@ class DeviceInfoRepository(
 
         val locale = Locale.getDefault()
         val timeZone = TimeZone.getDefault()
-        val instanceId = preferencesManager.getOrCreateAppGeneratedInstanceId()
 
         DeviceInfoSnapshot(
             androidVersion = Build.VERSION.RELEASE ?: "Unknown",
@@ -65,11 +62,6 @@ class DeviceInfoRepository(
             timeZoneDisplay = "${timeZone.id} (${timeZone.getDisplayName(false, TimeZone.SHORT, locale)})",
             availableStorageBytes = availableBytes,
             totalStorageBytes = totalBytes,
-            appGeneratedWorkspaceId = instanceId,
         )
-    }
-
-    suspend fun regenerateAppGeneratedWorkspaceId(): String = withContext(Dispatchers.IO) {
-        preferencesManager.regenerateAppGeneratedInstanceId()
     }
 }

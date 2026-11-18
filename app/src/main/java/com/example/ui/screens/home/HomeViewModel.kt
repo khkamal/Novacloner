@@ -162,7 +162,7 @@ class HomeViewModel(
     fun resetWorkspace(id: Long, clearAppAssociation: Boolean) {
         viewModelScope.launch {
             workspaceRepository.resetWorkspace(id, clearAppAssociation)
-            _events.emit(HomeEvent.ShowMessage("Workspace content reset."))
+            _events.emit(HomeEvent.ShowMessage("Workspace metadata and ID reset."))
         }
     }
 

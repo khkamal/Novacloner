@@ -1,8 +1,5 @@
 package com.example.ui.screens.deviceinfo
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,50 +12,35 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.ui.theme.NovaMonoLabelStyle
 import com.example.ui.theme.NovaTheme
 import com.example.utils.Formatters
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,18 +49,22 @@ fun DeviceInfoScreen(
     onNavigateBack: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    var showRegenerateDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Device Information") },
+                title = {
+                    Column {
+                        Text("Global Device Info", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            text = "Host Android OS & application diagnostics",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NovaTheme.colors.secondaryText,
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -154,83 +140,37 @@ fun DeviceInfoScreen(
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        // App-Generated Workspace Identifier
+                        // Global Scope Clarification
                         Surface(
                             shape = MaterialTheme.shapes.large,
                             color = NovaTheme.colors.elevatedSurface,
                             border = BorderStroke(
                                 1.dp,
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                             ),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Column(
+                            Row(
                                 modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.Top,
                             ) {
-                                Text(
-                                    text = "App-Generated Workspace Identifier",
-                                    style = MaterialTheme.typography.titleMedium,
+                                Icon(
+                                    imageVector = Icons.Outlined.Info,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
                                 )
-                                Text(
-                                    text = "Randomly generated using SecureRandom inside Nova Space and stored locally. This is strictly an application-level identifier—not a hardware or OS device ID.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = NovaTheme.colors.secondaryText,
-                                )
-                                Surface(
-                                    shape = MaterialTheme.shapes.small,
-                                    color = MaterialTheme.colorScheme.surface,
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(
-                                        text = info.appGeneratedWorkspaceId,
-                                        style = NovaMonoLabelStyle,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier
-                                            .padding(12.dp)
-                                            .testTag("device_info_app_uuid"),
+                                        text = "Global Host Device Diagnostics",
+                                        style = MaterialTheme.typography.titleSmall,
                                     )
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(
-                                        onClick = {
-                                            val clipboard = context.getSystemService(
-                                                Context.CLIPBOARD_SERVICE
-                                            ) as? ClipboardManager
-                                            clipboard?.setPrimaryClip(
-                                                ClipData.newPlainText(
-                                                    "Nova Space ID",
-                                                    info.appGeneratedWorkspaceId
-                                                )
-                                            )
-                                            scope.launch {
-                                                snackbarHostState.showSnackbar("App identifier copied.")
-                                            }
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.ContentCopy,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Copy ID")
-                                    }
-                                    FilledTonalButton(
-                                        onClick = { showRegenerateDialog = true },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("regenerate_uuid_button"),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Refresh,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Regenerate")
-                                    }
+                                    Text(
+                                        text = "This screen reports shared physical device metrics for Nova Space globally. Each Workspace maintains its own independent generated Workspace ID and metadata, accessible from that Workspace's detail screen.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = NovaTheme.colors.secondaryText,
+                                    )
                                 }
                             }
                         }
@@ -306,39 +246,6 @@ fun DeviceInfoScreen(
                 }
             }
         }
-    }
-
-    if (showRegenerateDialog) {
-        AlertDialog(
-            onDismissRequest = { showRegenerateDialog = false },
-            icon = { Icon(Icons.Outlined.Info, contentDescription = null) },
-            title = { Text("Regenerate App Identifier?") },
-            text = {
-                Text(
-                    "This generates a new random UUID for Nova Space's local workspace identifier. It does not change any Android OS or hardware identifier.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.regenerateAppWorkspaceId()
-                        showRegenerateDialog = false
-                        scope.launch {
-                            snackbarHostState.showSnackbar("App-generated workspace ID regenerated.")
-                        }
-                    },
-                    modifier = Modifier.testTag("confirm_regenerate_uuid_button"),
-                ) {
-                    Text("Regenerate")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRegenerateDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
     }
 }
 

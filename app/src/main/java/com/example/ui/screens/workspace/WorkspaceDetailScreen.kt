@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LinkOff
+import androidx.compose.material.icons.outlined.PermDeviceInformation
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.SwapHoriz
@@ -88,6 +89,7 @@ fun WorkspaceDetailScreen(
     onNavigateBack: () -> Unit,
     onChangeApp: (workspaceId: Long) -> Unit,
     onEditWorkspace: (workspaceId: Long) -> Unit,
+    onOpenWorkspaceDeviceInfo: (workspaceId: Long) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -356,6 +358,7 @@ fun WorkspaceDetailScreen(
                                     text = "Workspace Metadata",
                                     style = MaterialTheme.typography.titleMedium,
                                 )
+                                MetadataLine("Workspace ID", workspace.generatedWorkspaceId)
                                 MetadataLine("Created", Formatters.formatTimestamp(workspace.createdAt))
                                 MetadataLine("Last Updated", Formatters.formatTimestamp(workspace.updatedAt))
                                 MetadataLine("Launch Count", "${workspace.launchCount}")
@@ -364,6 +367,21 @@ fun WorkspaceDetailScreen(
                                     workspace.lastLaunchedAt?.let { Formatters.formatTimestamp(it) }
                                         ?: "Never"
                                 )
+                                FilledTonalButton(
+                                    onClick = { onOpenWorkspaceDeviceInfo(workspace.id) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp)
+                                        .testTag("detail_device_info_button"),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.PermDeviceInformation,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Workspace Device Info")
+                                }
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -415,7 +433,7 @@ fun WorkspaceDetailScreen(
                                             modifier = Modifier.size(18.dp),
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Reset Content")
+                                        Text("Reset Workspace")
                                     }
 
                                     OutlinedButton(
@@ -656,11 +674,13 @@ private fun MetadataLine(label: String, value: String) {
             text = label,
             style = MaterialTheme.typography.bodySmall,
             color = NovaTheme.colors.secondaryText,
+            modifier = Modifier.weight(0.38f),
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(0.62f),
         )
     }
 }

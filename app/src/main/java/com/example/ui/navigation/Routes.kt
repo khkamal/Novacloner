@@ -12,6 +12,9 @@ data class ImportAppsRoute(val targetWorkspaceId: Long? = null)
 data class WorkspaceDetailRoute(val workspaceId: Long)
 
 @Serializable
+data class WorkspaceDeviceInfoRoute(val workspaceId: Long)
+
+@Serializable
 data class WorkspaceEditorRoute(val workspaceId: Long? = null)
 
 @Serializable

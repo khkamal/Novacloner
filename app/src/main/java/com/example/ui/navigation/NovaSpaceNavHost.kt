@@ -41,6 +41,8 @@ import com.example.ui.screens.settings.SettingsScreen
 import com.example.ui.screens.settings.SettingsViewModel
 import com.example.ui.screens.workspace.WorkspaceDetailScreen
 import com.example.ui.screens.workspace.WorkspaceDetailViewModel
+import com.example.ui.screens.workspace.WorkspaceDeviceInfoScreen
+import com.example.ui.screens.workspace.WorkspaceDeviceInfoViewModel
 import com.example.ui.screens.workspace.WorkspaceEditorScreen
 import com.example.ui.screens.workspace.WorkspaceEditorViewModel
 
@@ -151,6 +153,32 @@ fun NovaSpaceNavHost(
                     },
                     onEditWorkspace = { wsId ->
                         navController.navigate(WorkspaceEditorRoute(workspaceId = wsId))
+                    },
+                    onOpenWorkspaceDeviceInfo = { wsId ->
+                        navController.navigate(WorkspaceDeviceInfoRoute(workspaceId = wsId)) {
+                            launchSingleTop = true
+                        }
+                    },
+                )
+            }
+
+            composable<WorkspaceDeviceInfoRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<WorkspaceDeviceInfoRoute>()
+                val vm: WorkspaceDeviceInfoViewModel = viewModel(
+                    factory = WorkspaceDeviceInfoViewModel.Factory(
+                        workspaceId = route.workspaceId,
+                        workspaceRepository = container.workspaceRepository,
+                        installedAppsRepository = container.installedAppsRepository,
+                        deviceInfoRepository = container.deviceInfoRepository,
+                        settingsRepository = container.settingsRepository,
+                    )
+                )
+                WorkspaceDeviceInfoScreen(
+                    viewModel = vm,
+                    installedAppsRepository = container.installedAppsRepository,
+                    onNavigateBack = { navController.popBackStack() },
+                    onOpenGlobalDeviceInfo = {
+                        navController.navigate(DeviceInfoRoute) { launchSingleTop = true }
                     },
                 )
             }

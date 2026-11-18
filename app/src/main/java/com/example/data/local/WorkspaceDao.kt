@@ -27,6 +27,12 @@ interface WorkspaceDao {
     @Update
     suspend fun updateWorkspace(entity: WorkspaceEntity)
 
+    @Query("SELECT generatedWorkspaceId FROM workspaces")
+    suspend fun getAllGeneratedWorkspaceIds(): List<String>
+
+    @Query("UPDATE workspaces SET generatedWorkspaceId = :generatedWorkspaceId, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateGeneratedWorkspaceId(id: Long, generatedWorkspaceId: String, updatedAt: Long)
+
     @Query("DELETE FROM workspaces WHERE id = :id")
     suspend fun deleteWorkspaceById(id: Long)
 

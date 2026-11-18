@@ -21,6 +21,7 @@ enum class WorkspaceAccent(val key: String, val label: String, val colorHex: Lon
 
 data class Workspace(
     val id: Long = 0L,
+    val generatedWorkspaceId: String = "",
     val name: String,
     val packageName: String? = null,
     val appDisplayName: String? = null,

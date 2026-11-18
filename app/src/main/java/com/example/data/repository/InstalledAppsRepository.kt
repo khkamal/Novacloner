@@ -85,4 +85,27 @@ class InstalledAppsRepository(private val context: Context) {
     suspend fun isAppInstalled(packageName: String?): Boolean = withContext(Dispatchers.IO) {
         AppLaunchHelper.isPackageInstalled(context, packageName)
     }
+
+    suspend fun getInstalledAppDetails(packageName: String?): InstalledAppInfo? = withContext(Dispatchers.IO) {
+        if (packageName.isNullOrBlank()) return@withContext null
+        val pm = context.packageManager
+        runCatching {
+            val pkgInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0L))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getPackageInfo(packageName, 0)
+            }
+            val appInfo = pkgInfo.applicationInfo
+            val appName = appInfo?.loadLabel(pm)?.toString()?.takeIf { it.isNotBlank() }
+                ?: packageName
+            val isSystem = appInfo != null && (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            InstalledAppInfo(
+                packageName = packageName,
+                appName = appName,
+                versionName = pkgInfo.versionName ?: "1.0",
+                isSystemApp = isSystem,
+            )
+        }.getOrNull()
+    }
 }

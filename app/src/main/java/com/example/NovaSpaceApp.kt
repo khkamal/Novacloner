@@ -34,10 +34,7 @@ class AppContainer(application: Application) {
     }
 
     val deviceInfoRepository: DeviceInfoRepository by lazy {
-        DeviceInfoRepository(
-            context = application,
-            preferencesManager = preferencesManager,
-        )
+        DeviceInfoRepository(context = application)
     }
 
     val settingsRepository: SettingsRepository by lazy {

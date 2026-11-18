@@ -126,7 +126,7 @@ class WorkspaceDetailViewModel(
         val ws = uiState.value.workspace ?: return
         viewModelScope.launch {
             workspaceRepository.resetWorkspace(ws.id, clearAppAssociation)
-            _events.emit(WorkspaceDetailEvent.ShowMessage("Workspace content reset."))
+            _events.emit(WorkspaceDetailEvent.ShowMessage("Workspace metadata and ID reset."))
         }
     }
 

@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.util.UUID
 
 class WorkspaceRepository(private val workspaceDao: WorkspaceDao) {
 
@@ -20,6 +21,14 @@ class WorkspaceRepository(private val workspaceDao: WorkspaceDao) {
         prettyPrint = true
         ignoreUnknownKeys = true
         encodeDefaults = true
+    }
+
+    private fun nextUniqueWorkspaceId(usedIds: MutableSet<String>): String {
+        var candidate: String
+        do {
+            candidate = UUID.randomUUID().toString()
+        } while (!usedIds.add(candidate))
+        return candidate
     }
 
     fun observeWorkspaces(): Flow<List<Workspace>> =
@@ -43,7 +52,13 @@ class WorkspaceRepository(private val workspaceDao: WorkspaceDao) {
     ): Long = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val trimmedName = name.trim().ifBlank { "Untitled Workspace" }
+        val usedIds = workspaceDao.getAllGeneratedWorkspaceIds()
+            .filter { it.isNotBlank() }
+            .toMutableSet()
+        val generatedId = nextUniqueWorkspaceId(usedIds)
+
         val entity = Workspace(
+            generatedWorkspaceId = generatedId,
             name = trimmedName,
             packageName = packageName?.takeIf { it.isNotBlank() },
             appDisplayName = appDisplayName?.takeIf { it.isNotBlank() },
@@ -58,7 +73,16 @@ class WorkspaceRepository(private val workspaceDao: WorkspaceDao) {
     }
 
     suspend fun updateWorkspace(workspace: Workspace) = withContext(Dispatchers.IO) {
+        val ensuredId = if (workspace.generatedWorkspaceId.isBlank()) {
+            val usedIds = workspaceDao.getAllGeneratedWorkspaceIds()
+                .filter { it.isNotBlank() }
+                .toMutableSet()
+            nextUniqueWorkspaceId(usedIds)
+        } else {
+            workspace.generatedWorkspaceId
+        }
         val sanitized = workspace.copy(
+            generatedWorkspaceId = ensuredId,
             name = workspace.name.trim().ifBlank { "Untitled Workspace" },
             description = workspace.description.trim(),
             notes = workspace.notes.trim(),
@@ -117,12 +141,40 @@ class WorkspaceRepository(private val workspaceDao: WorkspaceDao) {
         )
     }
 
+    suspend fun regenerateWorkspaceGeneratedId(id: Long): String? = withContext(Dispatchers.IO) {
+        val existing = workspaceDao.getWorkspaceById(id) ?: return@withContext null
+        val usedIds = workspaceDao.getAllGeneratedWorkspaceIds()
+            .filter { it.isNotBlank() }
+            .toMutableSet()
+        if (existing.generatedWorkspaceId.isNotBlank()) {
+            usedIds.add(existing.generatedWorkspaceId)
+        }
+        val newId = nextUniqueWorkspaceId(usedIds)
+        workspaceDao.updateGeneratedWorkspaceId(
+            id = existing.id,
+            generatedWorkspaceId = newId,
+            updatedAt = System.currentTimeMillis(),
+        )
+        newId
+    }
+
     suspend fun resetWorkspace(id: Long, clearAppAssociation: Boolean) = withContext(Dispatchers.IO) {
         val existing = workspaceDao.getWorkspaceById(id) ?: return@withContext
+        val usedIds = workspaceDao.getAllGeneratedWorkspaceIds()
+            .filter { it.isNotBlank() }
+            .toMutableSet()
+        if (existing.generatedWorkspaceId.isNotBlank()) {
+            usedIds.add(existing.generatedWorkspaceId)
+        }
+        val freshWorkspaceId = nextUniqueWorkspaceId(usedIds)
+
         workspaceDao.updateWorkspace(
             existing.copy(
+                generatedWorkspaceId = freshWorkspaceId,
                 description = "",
                 notes = "",
+                accentColorKey = WorkspaceAccent.COBALT.key,
+                isPinned = false,
                 launchCount = 0,
                 lastLaunchedAt = null,
                 packageName = if (clearAppAssociation) null else existing.packageName,
@@ -144,6 +196,7 @@ class WorkspaceRepository(private val workspaceDao: WorkspaceDao) {
         val items = workspaceDao.getAllWorkspacesOnce().map { entity ->
             WorkspaceExportItem(
                 name = entity.name,
+                generatedWorkspaceId = entity.generatedWorkspaceId,
                 packageName = entity.packageName,
                 appDisplayName = entity.appDisplayName,
                 description = entity.description,
@@ -165,11 +218,21 @@ class WorkspaceRepository(private val workspaceDao: WorkspaceDao) {
         runCatching {
             val bundle = json.decodeFromString<WorkspaceExportBundle>(rawJson)
             val now = System.currentTimeMillis()
+            val usedIds = workspaceDao.getAllGeneratedWorkspaceIds()
+                .filter { it.isNotBlank() }
+                .toMutableSet()
             var importedCount = 0
             bundle.workspaces.forEach { item ->
                 val cleanName = item.name.trim()
                 if (cleanName.isNotEmpty()) {
+                    val candidateId = item.generatedWorkspaceId?.trim().orEmpty()
+                    val assignedId = if (candidateId.isNotEmpty() && usedIds.add(candidateId)) {
+                        candidateId
+                    } else {
+                        nextUniqueWorkspaceId(usedIds)
+                    }
                     val entity = Workspace(
+                        generatedWorkspaceId = assignedId,
                         name = cleanName,
                         packageName = item.packageName?.takeIf { it.isNotBlank() },
                         appDisplayName = item.appDisplayName?.takeIf { it.isNotBlank() },

@@ -316,8 +316,8 @@ fun SettingsScreen(
                         HorizontalDivider(color = NovaTheme.colors.subtleBorder.copy(alpha = 0.5f))
                         SettingsNavigationRow(
                             icon = Icons.Outlined.PermDeviceInformation,
-                            title = "Device Information",
-                            subtitle = "System metrics and app-generated workspace ID",
+                            title = "Global Device Information",
+                            subtitle = "Shared Android system and host app diagnostics",
                             onClick = onOpenDeviceInfo,
                             testTag = "settings_device_info",
                         )
