@@ -21,7 +21,7 @@ interface WorkspaceDao {
     @Query("SELECT * FROM workspaces ORDER BY isPinned DESC, updatedAt DESC")
     suspend fun getAllWorkspacesOnce(): List<WorkspaceEntity>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertWorkspace(entity: WorkspaceEntity): Long
 
     @Update

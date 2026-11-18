@@ -61,6 +61,11 @@ data class DeviceInfoSnapshot(
 data class WorkspaceExportItem(
     val name: String,
     val generatedWorkspaceId: String? = null,
+    val simulatedDeviceId: String? = null,
+    val simulatedAndroidId: String? = null,
+    val simulatedWifiMac: String? = null,
+    val simulatedBluetoothMac: String? = null,
+    val simulatedIccSerial: String? = null,
     val packageName: String? = null,
     val appDisplayName: String? = null,
     val description: String = "",

@@ -201,11 +201,11 @@ fun ResetWorkspaceDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "This resets only \"$workspaceName\" inside Nova Space: clearing its description, notes, accent color, pinned state, and launch counter, and generating a new Workspace ID. Other Workspaces are unaffected.",
+                    text = "This resets only \"$workspaceName\" inside Nova Space: clearing its description, notes, accent color, pinned state, and launch counter, and generating a fresh Workspace UUID and simulated device identity profile. Other Workspaces are unaffected.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    text = "It does not reset any external installed app's data, cache, login session, hardware identity, or Android sandbox.",
+                    text = "It does not reset any external installed app's data, cache, login session, real hardware identifiers, or Android sandbox.",
                     style = MaterialTheme.typography.bodySmall,
                     color = NovaTheme.colors.secondaryText,
                 )

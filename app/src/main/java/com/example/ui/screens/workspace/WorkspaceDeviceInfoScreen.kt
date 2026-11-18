@@ -20,9 +20,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.PermDeviceInformation
 import androidx.compose.material.icons.outlined.Refresh
@@ -85,6 +87,15 @@ fun WorkspaceDeviceInfoScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     var showRegenerateDialog by remember { mutableStateOf(false) }
 
+    fun copyToClipboard(clipLabel: String, value: String, feedback: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText(clipLabel, value))
+        scope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(feedback)
+        }
+    }
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -98,7 +109,10 @@ fun WorkspaceDeviceInfoScreen(
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
-                is WorkspaceDeviceInfoEvent.ShowMessage -> snackbarHostState.showSnackbar(event.message)
+                is WorkspaceDeviceInfoEvent.ShowMessage -> {
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                    snackbarHostState.showSnackbar(event.message)
+                }
             }
         }
     }
@@ -186,6 +200,45 @@ fun WorkspaceDeviceInfoScreen(
             }
 
             else -> {
+                val identityFields = listOf(
+                    IdentityFieldItem(
+                        label = "Device ID",
+                        value = workspace.simulatedDeviceId,
+                        valueTag = "identity_device_id_value",
+                        copyTag = "copy_device_id_button",
+                    ),
+                    IdentityFieldItem(
+                        label = "Android ID",
+                        value = workspace.simulatedAndroidId,
+                        valueTag = "identity_android_id_value",
+                        copyTag = "copy_android_id_button",
+                    ),
+                    IdentityFieldItem(
+                        label = "WiFi MAC",
+                        value = workspace.simulatedWifiMac,
+                        valueTag = "identity_wifi_mac_value",
+                        copyTag = "copy_wifi_mac_button",
+                    ),
+                    IdentityFieldItem(
+                        label = "Bluetooth MAC",
+                        value = workspace.simulatedBluetoothMac,
+                        valueTag = "identity_bluetooth_mac_value",
+                        copyTag = "copy_bluetooth_mac_button",
+                    ),
+                    IdentityFieldItem(
+                        label = "ICC Serial",
+                        value = workspace.simulatedIccSerial,
+                        valueTag = "identity_icc_serial_value",
+                        copyTag = "copy_icc_serial_button",
+                    ),
+                    IdentityFieldItem(
+                        label = "Workspace UUID",
+                        value = workspace.generatedWorkspaceId,
+                        valueTag = "workspace_device_info_uuid",
+                        copyTag = "workspace_copy_uuid_button",
+                    ),
+                )
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -200,7 +253,7 @@ fun WorkspaceDeviceInfoScreen(
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        // Workspace-Specific Persistent ID Card
+                        // Structured Workspace Device Identity Panel
                         Surface(
                             shape = MaterialTheme.shapes.large,
                             color = NovaTheme.colors.elevatedSurface,
@@ -208,7 +261,9 @@ fun WorkspaceDeviceInfoScreen(
                                 1.dp,
                                 workspace.accentColor.color.copy(alpha = 0.45f),
                             ),
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("device_identity_panel"),
                         ) {
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 Box(
@@ -221,46 +276,100 @@ fun WorkspaceDeviceInfoScreen(
                                     modifier = Modifier.padding(16.dp),
                                     verticalArrangement = Arrangement.spacedBy(10.dp),
                                 ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Fingerprint,
+                                                contentDescription = null,
+                                                tint = workspace.accentColor.color,
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                            Text(
+                                                text = "Device Identity",
+                                                style = MaterialTheme.typography.titleMedium,
+                                            )
+                                        }
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                            border = BorderStroke(
+                                                1.dp,
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                                            ),
+                                        ) {
+                                            Text(
+                                                text = "Simulated Profile",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.padding(
+                                                    horizontal = 10.dp,
+                                                    vertical = 4.dp,
+                                                ),
+                                            )
+                                        }
+                                    }
+
                                     Text(
-                                        text = "Workspace-Specific Identifier",
-                                        style = MaterialTheme.typography.titleMedium,
-                                    )
-                                    Text(
-                                        text = "Persistent UUID generated independently for \"${workspace.name}\" inside Nova Space. Regenerating it affects only this Workspace. It is not a real Android hardware ID and does not isolate external app identities.",
+                                        text = "Simulated per-Workspace identity values stored locally for \"${workspace.name}\". They do not alter real Android hardware identifiers or provide spoofed values to external installed apps.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = NovaTheme.colors.secondaryText,
                                     )
+
                                     Surface(
-                                        shape = MaterialTheme.shapes.small,
+                                        shape = MaterialTheme.shapes.medium,
                                         color = MaterialTheme.colorScheme.surface,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            NovaTheme.colors.subtleBorder.copy(alpha = 0.9f),
+                                        ),
                                         modifier = Modifier.fillMaxWidth(),
                                     ) {
-                                        Text(
-                                            text = workspace.generatedWorkspaceId,
-                                            style = NovaMonoLabelStyle,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier
-                                                .padding(12.dp)
-                                                .testTag("workspace_device_info_uuid"),
-                                        )
+                                        Column(modifier = Modifier.fillMaxWidth()) {
+                                            identityFields.forEachIndexed { index, item ->
+                                                if (index > 0) {
+                                                    HorizontalDivider(
+                                                        color = NovaTheme.colors.subtleBorder.copy(alpha = 0.55f)
+                                                    )
+                                                }
+                                                DeviceIdentityRow(
+                                                    label = item.label,
+                                                    value = item.value,
+                                                    valueTag = item.valueTag,
+                                                    copyTag = item.copyTag,
+                                                    onCopy = {
+                                                        copyToClipboard(
+                                                            clipLabel = "${workspace.name} ${item.label}",
+                                                            value = item.value,
+                                                            feedback = "${item.label} copied.",
+                                                        )
+                                                    },
+                                                )
+                                            }
+                                        }
                                     }
+
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         OutlinedButton(
                                             onClick = {
-                                                val clipboard = context.getSystemService(
-                                                    Context.CLIPBOARD_SERVICE
-                                                ) as? ClipboardManager
-                                                clipboard?.setPrimaryClip(
-                                                    ClipData.newPlainText(
-                                                        "${workspace.name} Workspace ID",
-                                                        workspace.generatedWorkspaceId,
-                                                    )
-                                                )
-                                                scope.launch {
-                                                    snackbarHostState.showSnackbar("Workspace ID copied.")
+                                                val formattedSummary = identityFields.joinToString("\n") {
+                                                    "${it.label}: ${it.value}"
                                                 }
+                                                copyToClipboard(
+                                                    clipLabel = "${workspace.name} Device Identity",
+                                                    value = formattedSummary,
+                                                    feedback = "Device identity profile copied.",
+                                                )
                                             },
-                                            modifier = Modifier.weight(1f),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .testTag("workspace_copy_all_identity_button"),
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Outlined.ContentCopy,
@@ -268,7 +377,7 @@ fun WorkspaceDeviceInfoScreen(
                                                 modifier = Modifier.size(16.dp),
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Copy ID")
+                                            Text("Copy All")
                                         }
                                         FilledTonalButton(
                                             onClick = { showRegenerateDialog = true },
@@ -289,12 +398,11 @@ fun WorkspaceDeviceInfoScreen(
                             }
                         }
 
-                        // Workspace Identity & Lifecycle
+                        // Workspace Lifecycle Summary
                         WorkspaceInfoSectionCard(
-                            title = "Workspace Identity",
+                            title = "Workspace Lifecycle",
                             rows = listOf(
                                 "Workspace Name" to workspace.name,
-                                "Workspace ID" to workspace.generatedWorkspaceId,
                                 "Local Record Key" to "#${workspace.id}",
                                 "Creation Date" to Formatters.formatTimestamp(workspace.createdAt),
                                 "Last Updated" to Formatters.formatTimestamp(workspace.updatedAt),
@@ -353,6 +461,7 @@ fun WorkspaceDeviceInfoScreen(
                                                 text = workspace.packageName,
                                                 style = NovaMonoLabelStyle,
                                                 color = NovaTheme.colors.secondaryText,
+                                                modifier = Modifier.testTag("workspace_device_info_linked_package"),
                                             )
                                         }
                                     }
@@ -465,7 +574,9 @@ fun WorkspaceDeviceInfoScreen(
                             shape = MaterialTheme.shapes.medium,
                             color = MaterialTheme.colorScheme.surface,
                             border = BorderStroke(1.dp, NovaTheme.colors.subtleBorder),
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("workspace_device_info_footer"),
                         ) {
                             Row(
                                 modifier = Modifier.padding(14.dp),
@@ -479,7 +590,7 @@ fun WorkspaceDeviceInfoScreen(
                                     modifier = Modifier.size(18.dp),
                                 )
                                 Text(
-                                    text = "Workspace IDs are managed solely inside Nova Space's local Room database. Deleting or resetting this Workspace removes only its local record and does not modify external Android apps or system hardware identifiers.",
+                                    text = "Workspace identity profiles are simulated values stored solely inside Nova Space's local Room database. Deleting, resetting, or regenerating this Workspace affects only its local profile and never modifies external apps or system hardware identifiers.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = NovaTheme.colors.secondaryText,
                                 )
@@ -497,17 +608,17 @@ fun WorkspaceDeviceInfoScreen(
         AlertDialog(
             onDismissRequest = { showRegenerateDialog = false },
             icon = { Icon(Icons.Outlined.Info, contentDescription = null) },
-            title = { Text("Regenerate Workspace ID?") },
+            title = { Text("Regenerate Device Identity?") },
             text = {
                 Text(
-                    "This generates a new random UUID exclusively for \"${workspace.name}\". Other Workspaces, installed applications, and Android hardware identifiers are unaffected.",
+                    "This generates new simulated Device ID, Android ID, WiFi MAC, Bluetooth MAC, ICC Serial, and Workspace UUID values exclusively for \"${workspace.name}\". Other Workspaces, installed applications, and real Android hardware identifiers are unaffected.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.regenerateWorkspaceId()
+                        viewModel.regenerateWorkspaceIdentity()
                         showRegenerateDialog = false
                     },
                     modifier = Modifier.testTag("confirm_workspace_regenerate_uuid_button"),
@@ -521,6 +632,56 @@ fun WorkspaceDeviceInfoScreen(
                 }
             },
         )
+    }
+}
+
+private data class IdentityFieldItem(
+    val label: String,
+    val value: String,
+    val valueTag: String,
+    val copyTag: String,
+)
+
+@Composable
+private fun DeviceIdentityRow(
+    label: String,
+    value: String,
+    valueTag: String,
+    copyTag: String,
+    onCopy: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = NovaTheme.colors.secondaryText,
+            modifier = Modifier.width(100.dp),
+        )
+        Text(
+            text = value,
+            style = NovaMonoLabelStyle,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 8.dp)
+                .testTag(valueTag),
+        )
+        IconButton(
+            onClick = onCopy,
+            modifier = Modifier.testTag(copyTag),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.ContentCopy,
+                contentDescription = "Copy $label",
+                tint = NovaTheme.colors.secondaryText,
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }
 

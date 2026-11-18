@@ -1,14 +1,30 @@
 package com.example.data.local
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.domain.model.Workspace
 import com.example.domain.model.WorkspaceAccent
 
-@Entity(tableName = "workspaces")
+@Entity(
+    tableName = "workspaces",
+    indices = [
+        Index(value = ["generatedWorkspaceId"], unique = true),
+        Index(value = ["simulatedDeviceId"], unique = true),
+        Index(value = ["simulatedAndroidId"], unique = true),
+        Index(value = ["simulatedWifiMac"], unique = true),
+        Index(value = ["simulatedBluetoothMac"], unique = true),
+        Index(value = ["simulatedIccSerial"], unique = true),
+    ],
+)
 data class WorkspaceEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val generatedWorkspaceId: String = "",
+    val simulatedDeviceId: String = "",
+    val simulatedAndroidId: String = "",
+    val simulatedWifiMac: String = "",
+    val simulatedBluetoothMac: String = "",
+    val simulatedIccSerial: String = "",
     val name: String,
     val packageName: String? = null,
     val appDisplayName: String? = null,
@@ -25,6 +41,11 @@ data class WorkspaceEntity(
 fun WorkspaceEntity.toDomain(): Workspace = Workspace(
     id = id,
     generatedWorkspaceId = generatedWorkspaceId,
+    simulatedDeviceId = simulatedDeviceId,
+    simulatedAndroidId = simulatedAndroidId,
+    simulatedWifiMac = simulatedWifiMac,
+    simulatedBluetoothMac = simulatedBluetoothMac,
+    simulatedIccSerial = simulatedIccSerial,
     name = name,
     packageName = packageName,
     appDisplayName = appDisplayName,
@@ -41,6 +62,11 @@ fun WorkspaceEntity.toDomain(): Workspace = Workspace(
 fun Workspace.toEntity(): WorkspaceEntity = WorkspaceEntity(
     id = id,
     generatedWorkspaceId = generatedWorkspaceId,
+    simulatedDeviceId = simulatedDeviceId,
+    simulatedAndroidId = simulatedAndroidId,
+    simulatedWifiMac = simulatedWifiMac,
+    simulatedBluetoothMac = simulatedBluetoothMac,
+    simulatedIccSerial = simulatedIccSerial,
     name = name,
     packageName = packageName,
     appDisplayName = appDisplayName,

@@ -112,12 +112,12 @@ class WorkspaceDeviceInfoViewModel(
         }
     }
 
-    fun regenerateWorkspaceId() {
+    fun regenerateWorkspaceIdentity() {
         viewModelScope.launch {
-            val newId = workspaceRepository.regenerateWorkspaceGeneratedId(workspaceId)
-            if (newId != null) {
+            val updated = workspaceRepository.regenerateWorkspaceIdentityProfile(workspaceId)
+            if (updated != null) {
                 _events.emit(
-                    WorkspaceDeviceInfoEvent.ShowMessage("Workspace ID regenerated for this Workspace.")
+                    WorkspaceDeviceInfoEvent.ShowMessage("Device identity regenerated for this Workspace.")
                 )
             }
         }

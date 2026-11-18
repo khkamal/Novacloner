@@ -32,6 +32,7 @@ val NovaMonoLabelStyle = TextStyle(
     fontSize = 12.sp,
     lineHeight = 16.sp,
     letterSpacing = 0.2.sp,
+    fontFeatureSettings = "tnum",
 )
 
 val NovaTypography = Typography(
