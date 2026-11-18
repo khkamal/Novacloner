@@ -4,6 +4,7 @@ import com.example.data.local.WorkspaceDao
 import com.example.data.local.WorkspaceEntity
 import com.example.data.local.toDomain
 import com.example.data.local.toEntity
+import com.example.domain.model.ExecutionMode
 import com.example.domain.model.Workspace
 import com.example.domain.model.WorkspaceAccent
 import com.example.domain.model.WorkspaceExportBundle
@@ -369,6 +370,7 @@ class WorkspaceRepository(private val workspaceDao: WorkspaceDao) {
                 description = entity.description,
                 notes = entity.notes,
                 accentColorKey = entity.accentColorKey,
+                executionModeKey = entity.executionModeKey,
                 isPinned = entity.isPinned,
                 createdAt = entity.createdAt,
                 updatedAt = entity.updatedAt,
@@ -462,6 +464,7 @@ class WorkspaceRepository(private val workspaceDao: WorkspaceDao) {
                             description = item.description.trim(),
                             notes = item.notes.trim(),
                             accentColor = WorkspaceAccent.fromKey(item.accentColorKey),
+                            executionMode = ExecutionMode.fromKey(item.executionModeKey),
                             isPinned = item.isPinned,
                             createdAt = item.createdAt.takeIf { it > 0L } ?: now,
                             updatedAt = now,

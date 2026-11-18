@@ -3,6 +3,7 @@ package com.example
 import android.content.ClipboardManager
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
+import android.os.UserHandle
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -18,10 +19,24 @@ import com.example.data.local.NovaSpaceDatabase
 import com.example.data.local.PreferencesManager
 import com.example.data.repository.SecretZoneRepository
 import com.example.data.repository.WorkspaceRepository
+import com.example.data.runtime.AppCompatibilityAnalyzer
+import com.example.data.runtime.ContainerRuntimeRegistry
+import com.example.data.runtime.HostDirectRuntime
+import com.example.data.runtime.UnsupportedRuntime
+import com.example.data.runtime.WorkProfileDetector
+import com.example.data.runtime.WorkProfileRuntime
+import com.example.domain.model.CompatibilityStatus
 import com.example.domain.model.DefaultWorkspaceBehavior
+import com.example.domain.model.ExecutionMode
 import com.example.domain.model.SecretRecordCategory
 import com.example.domain.model.ThemeMode
+import com.example.domain.model.Workspace
 import com.example.domain.model.WorkspaceAccent
+import com.example.domain.runtime.ContainerRuntime
+import com.example.domain.runtime.RuntimeCapabilities
+import com.example.domain.runtime.RuntimeLaunchResult
+import com.example.domain.runtime.RuntimeMaintenanceResult
+import com.example.domain.runtime.RuntimeProvisionResult
 import com.example.utils.AppLaunchHelper
 import com.example.utils.LaunchResult
 import com.example.utils.WorkspaceIdentityGenerator
@@ -672,8 +687,17 @@ class NovaSpaceRobolectricTest {
         }
         assertNotEquals(focusBefore.generatedWorkspaceId, secondBefore.generatedWorkspaceId)
 
-        // Open Focus Space -> Detail -> Workspace Device Info
+        // Open Focus Space -> Detail -> verify Execution & Runtime card -> Workspace Device Info
         composeRule.onNodeWithText("Focus Space").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("detail_execution_runtime_card").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("detail_execution_runtime_card").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Not Virtualized").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Host App — Shared Data").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("detail_isolated_data_value").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("detail_compatibility_status_value").performScrollTo().assertIsDisplayed()
+
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("detail_device_info_button").fetchSemanticsNodes().isNotEmpty()
         }
@@ -795,5 +819,278 @@ class NovaSpaceRobolectricTest {
         composeRule.onNodeWithTag("home_settings_button").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Appearance").assertIsDisplayed()
+    }
+
+    @Test
+    fun `room migration 4 to 5 preserves existing records identity profiles secret zone and defaults execution mode`(): Unit = runBlocking {
+        val dbName = "migration_v4_to_v5_test.db"
+        context.deleteDatabase(dbName)
+        val dbFile = context.getDatabasePath(dbName)
+        dbFile.parentFile?.mkdirs()
+
+        val v4Db = SQLiteDatabase.openOrCreateDatabase(dbFile, null)
+        v4Db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `workspaces` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `generatedWorkspaceId` TEXT NOT NULL DEFAULT '',
+                `simulatedDeviceId` TEXT NOT NULL DEFAULT '',
+                `simulatedAndroidId` TEXT NOT NULL DEFAULT '',
+                `simulatedWifiMac` TEXT NOT NULL DEFAULT '',
+                `simulatedBluetoothMac` TEXT NOT NULL DEFAULT '',
+                `simulatedIccSerial` TEXT NOT NULL DEFAULT '',
+                `name` TEXT NOT NULL,
+                `packageName` TEXT,
+                `appDisplayName` TEXT,
+                `description` TEXT NOT NULL,
+                `notes` TEXT NOT NULL,
+                `accentColorKey` TEXT NOT NULL,
+                `isPinned` INTEGER NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                `updatedAt` INTEGER NOT NULL,
+                `launchCount` INTEGER NOT NULL,
+                `lastLaunchedAt` INTEGER
+            )
+            """.trimIndent()
+        )
+        v4Db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_workspaces_generatedWorkspaceId` ON `workspaces` (`generatedWorkspaceId`)")
+        v4Db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_workspaces_simulatedDeviceId` ON `workspaces` (`simulatedDeviceId`)")
+        v4Db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_workspaces_simulatedAndroidId` ON `workspaces` (`simulatedAndroidId`)")
+        v4Db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_workspaces_simulatedWifiMac` ON `workspaces` (`simulatedWifiMac`)")
+        v4Db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_workspaces_simulatedBluetoothMac` ON `workspaces` (`simulatedBluetoothMac`)")
+        v4Db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_workspaces_simulatedIccSerial` ON `workspaces` (`simulatedIccSerial`)")
+        v4Db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `secret_records` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `title` TEXT NOT NULL,
+                `categoryKey` TEXT NOT NULL,
+                `content` TEXT NOT NULL,
+                `linkedPackageName` TEXT,
+                `linkedAppName` TEXT,
+                `createdAt` INTEGER NOT NULL,
+                `updatedAt` INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        v4Db.execSQL(
+            """
+            INSERT INTO workspaces (
+                generatedWorkspaceId, simulatedDeviceId, simulatedAndroidId,
+                simulatedWifiMac, simulatedBluetoothMac, simulatedIccSerial,
+                name, packageName, appDisplayName, description, notes,
+                accentColorKey, isPinned, createdAt, updatedAt, launchCount, lastLaunchedAt
+            ) VALUES (
+                'cccccccc-cccc-cccc-cccc-cccccccccccc', '358472910482715', '4a9f0c2e8b1d73f6',
+                '02:aa:bb:cc:dd:01', '02:aa:bb:cc:dd:02', '8901410321111851072',
+                'V4 Space', 'com.test.v4', 'V4 App', 'Desc V4', 'Notes V4',
+                'cobalt', 1, 1000, 2000, 4, 1900
+            )
+            """.trimIndent()
+        )
+        v4Db.execSQL(
+            "INSERT INTO secret_records (title, categoryKey, content, linkedPackageName, linkedAppName, createdAt, updatedAt) VALUES ('V4 Secret', 'private_note', 'Preserved secret', NULL, NULL, 1200, 2200)"
+        )
+        v4Db.version = 4
+        v4Db.close()
+
+        val migratedDb = Room.databaseBuilder(context, NovaSpaceDatabase::class.java, dbName)
+            .allowMainThreadQueries()
+            .addMigrations(*NovaSpaceDatabase.ALL_MIGRATIONS)
+            .build()
+        val repo = WorkspaceRepository(migratedDb.workspaceDao())
+
+        val workspaces = repo.observeWorkspaces().first()
+        assertEquals(1, workspaces.size)
+        val ws = workspaces.first()
+        assertEquals("V4 Space", ws.name)
+        assertEquals("cccccccc-cccc-cccc-cccc-cccccccccccc", ws.generatedWorkspaceId)
+        assertEquals("358472910482715", ws.simulatedDeviceId)
+        assertEquals("4a9f0c2e8b1d73f6", ws.simulatedAndroidId)
+        assertEquals("02:aa:bb:cc:dd:01", ws.simulatedWifiMac)
+        assertEquals("02:aa:bb:cc:dd:02", ws.simulatedBluetoothMac)
+        assertEquals("8901410321111851072", ws.simulatedIccSerial)
+        assertEquals(ExecutionMode.HOST_DIRECT, ws.executionMode)
+        assertEquals("com.test.v4", ws.packageName)
+        assertEquals(4, ws.launchCount)
+
+        val secrets = migratedDb.secretRecordDao().observeAllRecords().first()
+        assertEquals(1, secrets.size)
+        assertEquals("V4 Secret", secrets.first().title)
+
+        migratedDb.close()
+        context.deleteDatabase(dbName)
+    }
+
+    @Test
+    fun `host direct runtime launches installed app updates launch count and handles missing app gracefully`(): Unit = runBlocking {
+        val hostRuntime = HostDirectRuntime(context)
+        val detector = WorkProfileDetector(context)
+        val analyzer = AppCompatibilityAnalyzer(context)
+        val registry = ContainerRuntimeRegistry(
+            hostDirectRuntime = hostRuntime,
+            workProfileRuntime = WorkProfileRuntime(detector),
+            isolatedContainerRuntime = UnsupportedRuntime(ExecutionMode.ISOLATED_CONTAINER),
+            unsupportedRuntime = UnsupportedRuntime(ExecutionMode.UNSUPPORTED),
+            workProfileDetector = detector,
+            compatibilityAnalyzer = analyzer,
+            workspaceRepository = workspaceRepo,
+        )
+
+        val selfCaps = hostRuntime.probeCapabilities(context.packageName)
+        assertTrue(selfCaps.isOperational)
+        assertFalse(selfCaps.providesIsolatedAppData)
+        assertFalse(selfCaps.isVirtualized)
+        assertEquals("Host App — Shared Data", selfCaps.displayLabel)
+
+        val missingCaps = hostRuntime.probeCapabilities("com.novaspace.nonexistent.pkg")
+        assertFalse(missingCaps.isOperational)
+        assertFalse(missingCaps.providesIsolatedAppData)
+
+        val wsId = workspaceRepo.createWorkspace(
+            name = "Host Launch Space",
+            packageName = context.packageName,
+            appDisplayName = "Nova Space",
+        )
+        val ws = workspaceRepo.getWorkspace(wsId)!!
+        val launchOutcome = registry.launchWorkspaceApp(context, ws)
+        assertTrue(launchOutcome is RuntimeLaunchResult.Success)
+        val updated = workspaceRepo.getWorkspace(wsId)!!
+        assertEquals(1, updated.launchCount)
+
+        val missingWs = ws.copy(packageName = "com.novaspace.nonexistent.pkg")
+        val missingLaunch = registry.launchWorkspaceApp(context, missingWs)
+        assertTrue(missingLaunch is RuntimeLaunchResult.Blocked)
+    }
+
+    @Test
+    fun `runtime registry falls back safely and never dispatches to unimplemented isolated runtime`(): Unit = runBlocking {
+        var unimplementedLaunchCalled = false
+        val unimplementedIsolatedRuntime = object : ContainerRuntime {
+            override val mode: ExecutionMode = ExecutionMode.ISOLATED_CONTAINER
+            override suspend fun probeCapabilities(packageName: String?) = RuntimeCapabilities(
+                mode = ExecutionMode.ISOLATED_CONTAINER,
+                displayLabel = "Isolated Container",
+                isOperational = false,
+                providesIsolatedAppData = false,
+                isVirtualized = false,
+                statusMessage = "Not implemented in Phase 1.",
+                limitations = listOf("No isolated engine."),
+            )
+            override suspend fun provisionInstance(workspace: Workspace, packageName: String) =
+                RuntimeProvisionResult.Unsupported("Not implemented")
+            override suspend fun launchInstance(context: Context, workspace: Workspace, packageName: String?): RuntimeLaunchResult {
+                unimplementedLaunchCalled = true
+                return RuntimeLaunchResult.Blocked(ExecutionMode.ISOLATED_CONTAINER, "Must not be called")
+            }
+            override suspend fun clearInstanceData(workspace: Workspace) =
+                RuntimeMaintenanceResult.Unsupported("Not implemented")
+            override suspend fun destroyInstance(workspace: Workspace) =
+                RuntimeMaintenanceResult.Unsupported("Not implemented")
+        }
+
+        val detector = WorkProfileDetector(context)
+        val analyzer = AppCompatibilityAnalyzer(context)
+        val registry = ContainerRuntimeRegistry(
+            hostDirectRuntime = HostDirectRuntime(context),
+            workProfileRuntime = WorkProfileRuntime(detector),
+            isolatedContainerRuntime = unimplementedIsolatedRuntime,
+            unsupportedRuntime = UnsupportedRuntime(ExecutionMode.UNSUPPORTED),
+            workProfileDetector = detector,
+            compatibilityAnalyzer = analyzer,
+            workspaceRepository = workspaceRepo,
+        )
+
+        val isolatedRequestWs = Workspace(
+            id = 42L,
+            name = "Requested Container",
+            packageName = context.packageName,
+            appDisplayName = "Nova Space",
+            executionMode = ExecutionMode.ISOLATED_CONTAINER,
+        )
+
+        val resolved = registry.resolveRuntimeState(isolatedRequestWs)
+        assertEquals(ExecutionMode.ISOLATED_CONTAINER, resolved.requestedMode)
+        assertEquals(ExecutionMode.HOST_DIRECT, resolved.effectiveMode)
+        assertTrue(resolved.fallbackApplied)
+        assertFalse(resolved.isVirtualized)
+        assertFalse(resolved.providesIsolatedAppData)
+
+        val launchResult = registry.launchWorkspaceApp(context, isolatedRequestWs)
+        assertTrue(launchResult is RuntimeLaunchResult.Success)
+        assertFalse(unimplementedLaunchCalled)
+
+        val unsupportedWs = isolatedRequestWs.copy(executionMode = ExecutionMode.UNSUPPORTED)
+        val unsupportedState = registry.resolveRuntimeState(unsupportedWs)
+        assertEquals(ExecutionMode.UNSUPPORTED, unsupportedState.effectiveMode)
+        assertFalse(unsupportedState.isVirtualized)
+        assertFalse(unsupportedState.canLaunch)
+        assertTrue(registry.launchWorkspaceApp(context, unsupportedWs) is RuntimeLaunchResult.Blocked)
+    }
+
+    @Test
+    fun `read only work profile detector handles inaccessible and restricted profiles honestly`(): Unit = runBlocking {
+        val currentHandle = android.os.Process.myUserHandle()
+        val secondaryParcel = android.os.Parcel.obtain()
+        secondaryParcel.writeInt(10)
+        secondaryParcel.setDataPosition(0)
+        val secondaryHandle = UserHandle.readFromParcel(secondaryParcel)
+        secondaryParcel.recycle()
+
+        val restrictedBackend = object : WorkProfileDetector.ProfileInspectionBackend {
+            override fun myUserHandle(): UserHandle = currentHandle
+            override fun getUserProfiles(): List<UserHandle> = listOf(currentHandle, secondaryHandle)
+            override fun getCrossProfileTargets(): List<UserHandle> = emptyList()
+            override fun isCrossProfileApiSupported(): Boolean = true
+            override fun hasShortcutHostPermission(): Boolean = false
+            override fun canQueryActivitiesInProfile(
+                userHandle: UserHandle,
+                packageName: String?,
+            ): WorkProfileDetector.ProfileQueryOutcome =
+                WorkProfileDetector.ProfileQueryOutcome.Restricted("OEM blocked cross-profile query")
+        }
+
+        val restrictedDetector = WorkProfileDetector(context, restrictedBackend)
+        val restrictedProbe = restrictedDetector.inspect(context.packageName)
+        assertTrue(restrictedProbe.secondaryProfileDetected)
+        assertFalse(restrictedProbe.secondaryProfileQueryAccessible)
+        assertFalse(restrictedProbe.canLaunchExternalAppAcrossProfiles)
+
+        val restrictedRuntime = WorkProfileRuntime(restrictedDetector)
+        val restrictedCaps = restrictedRuntime.probeCapabilities(context.packageName)
+        assertFalse(restrictedCaps.isOperational)
+        assertFalse(restrictedCaps.providesIsolatedAppData)
+        assertFalse(restrictedCaps.isVirtualized)
+
+        val visibleNoLauncherBackend = object : WorkProfileDetector.ProfileInspectionBackend {
+            override fun myUserHandle(): UserHandle = currentHandle
+            override fun getUserProfiles(): List<UserHandle> = listOf(currentHandle, secondaryHandle)
+            override fun getCrossProfileTargets(): List<UserHandle> = listOf(secondaryHandle)
+            override fun isCrossProfileApiSupported(): Boolean = true
+            override fun hasShortcutHostPermission(): Boolean = false
+            override fun canQueryActivitiesInProfile(
+                userHandle: UserHandle,
+                packageName: String?,
+            ): WorkProfileDetector.ProfileQueryOutcome =
+                WorkProfileDetector.ProfileQueryOutcome.Accessible(targetPackagePresent = true)
+        }
+
+        val visibleDetector = WorkProfileDetector(context, visibleNoLauncherBackend)
+        val visibleProbe = visibleDetector.inspect(context.packageName)
+        assertTrue(visibleProbe.secondaryProfileDetected)
+        assertTrue(visibleProbe.secondaryProfileQueryAccessible)
+        assertTrue(visibleProbe.targetAppVisibleInSecondaryProfile)
+        assertFalse(visibleProbe.canLaunchExternalAppAcrossProfiles)
+
+        val analyzer = AppCompatibilityAnalyzer(context)
+        val selfReport = analyzer.analyze(context.packageName)!!
+        assertTrue(selfReport.isInstalled)
+        assertTrue(selfReport.hasLaunchableActivity)
+        assertEquals(CompatibilityStatus.HOST_LAUNCHABLE, selfReport.status)
+
+        val missingReport = analyzer.analyze("com.novaspace.nonexistent.pkg")!!
+        assertFalse(missingReport.isInstalled)
+        assertEquals(CompatibilityStatus.UNAVAILABLE, missingReport.status)
+        assertTrue(missingReport.warnings.isNotEmpty())
     }
 }

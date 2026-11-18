@@ -8,12 +8,12 @@ import com.example.data.repository.InstalledAppsRepository
 import com.example.data.repository.SecretZoneRepository
 import com.example.data.repository.SettingsRepository
 import com.example.data.repository.WorkspaceRepository
+import com.example.data.runtime.ContainerRuntimeRegistry
 import com.example.domain.model.AppAvailability
 import com.example.domain.model.DefaultWorkspaceBehavior
 import com.example.domain.model.Workspace
 import com.example.domain.model.WorkspaceAccent
-import com.example.utils.AppLaunchHelper
-import com.example.utils.LaunchResult
+import com.example.domain.runtime.RuntimeLaunchResult
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -48,6 +48,7 @@ class HomeViewModel(
     private val workspaceRepository: WorkspaceRepository,
     private val installedAppsRepository: InstalledAppsRepository,
     private val secretZoneRepository: SecretZoneRepository,
+    private val runtimeRegistry: ContainerRuntimeRegistry,
     settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
@@ -188,13 +189,15 @@ class HomeViewModel(
 
     fun launchAssociatedApp(context: Context, workspace: Workspace) {
         viewModelScope.launch {
-            when (val result = AppLaunchHelper.launchApp(context, workspace.packageName)) {
-                LaunchResult.Success -> {
-                    workspaceRepository.recordAppLaunch(workspace.id)
-                }
-                else -> {
+            when (val result = runtimeRegistry.launchWorkspaceApp(context, workspace)) {
+                is RuntimeLaunchResult.Success -> Unit
+                is RuntimeLaunchResult.Blocked -> {
                     refreshInstalledAppStatuses()
-                    _events.emit(HomeEvent.ShowMessage(AppLaunchHelper.messageForFailure(result)))
+                    _events.emit(HomeEvent.ShowMessage(result.reason))
+                }
+                is RuntimeLaunchResult.Failure -> {
+                    refreshInstalledAppStatuses()
+                    _events.emit(HomeEvent.ShowMessage(result.reason))
                 }
             }
         }
@@ -204,6 +207,7 @@ class HomeViewModel(
         private val workspaceRepository: WorkspaceRepository,
         private val installedAppsRepository: InstalledAppsRepository,
         private val secretZoneRepository: SecretZoneRepository,
+        private val runtimeRegistry: ContainerRuntimeRegistry,
         private val settingsRepository: SettingsRepository,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
@@ -212,6 +216,7 @@ class HomeViewModel(
                 workspaceRepository = workspaceRepository,
                 installedAppsRepository = installedAppsRepository,
                 secretZoneRepository = secretZoneRepository,
+                runtimeRegistry = runtimeRegistry,
                 settingsRepository = settingsRepository,
             ) as T
         }

@@ -11,7 +11,7 @@ import java.util.UUID
 
 @Database(
     entities = [WorkspaceEntity::class, SecretRecordEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class NovaSpaceDatabase : RoomDatabase() {
@@ -170,7 +170,15 @@ abstract class NovaSpaceDatabase : RoomDatabase() {
             }
         }
 
-        val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE workspaces ADD COLUMN executionModeKey TEXT NOT NULL DEFAULT 'host_direct'"
+                )
+            }
+        }
+
+        val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 
         @Volatile
         private var INSTANCE: NovaSpaceDatabase? = null

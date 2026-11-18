@@ -71,6 +71,7 @@ data class WorkspaceExportItem(
     val description: String = "",
     val notes: String = "",
     val accentColorKey: String = "cobalt",
+    val executionModeKey: String = "host_direct",
     val isPinned: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,

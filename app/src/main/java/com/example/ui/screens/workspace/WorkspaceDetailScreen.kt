@@ -71,7 +71,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.repository.InstalledAppsRepository
 import com.example.domain.model.AppAvailability
+import com.example.domain.model.CompatibilityStatus
 import com.example.domain.model.Workspace
+import com.example.domain.runtime.ResolvedRuntimeState
 import com.example.ui.components.AppIconView
 import com.example.ui.components.DeleteWorkspaceDialog
 import com.example.ui.components.RenameWorkspaceDialog
@@ -298,6 +300,11 @@ fun WorkspaceDetailScreen(
                             onChangeApp = { onChangeApp(workspace.id) },
                             onUnlinkApp = viewModel::unlinkApp,
                         )
+
+                        // Execution Mode & Runtime Status Panel
+                        uiState.runtimeState?.let { runtimeState ->
+                            ExecutionRuntimeSection(runtimeState = runtimeState)
+                        }
 
                         // Notes Panel
                         Surface(
@@ -665,7 +672,147 @@ private fun AssociatedAppSection(
 }
 
 @Composable
-private fun MetadataLine(label: String, value: String) {
+private fun ExecutionRuntimeSection(runtimeState: ResolvedRuntimeState) {
+    val badgeBg = if (runtimeState.isVirtualized) {
+        NovaTheme.colors.successContainer
+    } else {
+        NovaTheme.colors.elevatedSurface
+    }
+    val badgeFg = if (runtimeState.isVirtualized) {
+        NovaTheme.colors.success
+    } else {
+        NovaTheme.colors.secondaryText
+    }
+
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, NovaTheme.colors.subtleBorder),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("detail_execution_runtime_card"),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "Execution & Runtime",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(badgeBg)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        text = if (runtimeState.isVirtualized) "Isolated" else "Not Virtualized",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = badgeFg,
+                    )
+                }
+            }
+
+            MetadataLine(
+                label = "Execution Mode",
+                value = runtimeState.executionModeLabel,
+                valueTag = "detail_execution_mode_value",
+            )
+            MetadataLine(
+                label = "Runtime Status",
+                value = runtimeState.runtimeStatusLabel,
+                valueTag = "detail_runtime_status_value",
+            )
+            MetadataLine(
+                label = "Isolated App Data",
+                value = if (runtimeState.providesIsolatedAppData) {
+                    "Yes — Isolated sandbox storage"
+                } else {
+                    "No — Uses shared host app storage"
+                },
+                valueTag = "detail_isolated_data_value",
+            )
+            MetadataLine(
+                label = "Profile Detection",
+                value = runtimeState.workProfileProbe.capabilitySummary,
+                valueTag = "detail_work_profile_probe_value",
+            )
+
+            Text(
+                text = runtimeState.statusDetail,
+                style = MaterialTheme.typography.bodySmall,
+                color = NovaTheme.colors.secondaryText,
+            )
+
+            if (runtimeState.limitations.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                Text(
+                    text = "Runtime Limitations",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                runtimeState.limitations.forEach { limitation ->
+                    Text(
+                        text = "• $limitation",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NovaTheme.colors.secondaryText,
+                    )
+                }
+            }
+
+            runtimeState.compatibilityReport?.let { report ->
+                HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                Text(
+                    text = "App Compatibility Analysis",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                MetadataLine(
+                    label = "Compatibility",
+                    value = report.status.label,
+                    valueTag = "detail_compatibility_status_value",
+                )
+                if (report.isInstalled) {
+                    val flagsSummary = buildList {
+                        if (report.targetSdkVersion > 0) add("API ${report.targetSdkVersion}")
+                        add(if (report.isSplitApk) "Split APK" else "Single APK")
+                        if (report.isSystemApp) add("System App")
+                        if (report.referencesPlayServices) add("GMS Metadata")
+                    }.joinToString(" • ")
+                    MetadataLine(
+                        label = "App Profile",
+                        value = flagsSummary,
+                    )
+                }
+                val warnColor = if (report.status == CompatibilityStatus.UNAVAILABLE) {
+                    NovaTheme.colors.warning
+                } else {
+                    NovaTheme.colors.secondaryText
+                }
+                report.warnings.forEach { warning ->
+                    Text(
+                        text = "• $warning",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = warnColor,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetadataLine(
+    label: String,
+    value: String,
+    valueTag: String? = null,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -680,7 +827,9 @@ private fun MetadataLine(label: String, value: String) {
             text = value,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(0.62f),
+            modifier = Modifier
+                .weight(0.62f)
+                .then(if (valueTag != null) Modifier.testTag(valueTag) else Modifier),
         )
     }
 }

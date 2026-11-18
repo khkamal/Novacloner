@@ -93,6 +93,7 @@ fun NovaSpaceNavHost(
                         workspaceRepository = container.workspaceRepository,
                         installedAppsRepository = container.installedAppsRepository,
                         secretZoneRepository = container.secretZoneRepository,
+                        runtimeRegistry = container.runtimeRegistry,
                         settingsRepository = container.settingsRepository,
                     )
                 )
@@ -142,6 +143,7 @@ fun NovaSpaceNavHost(
                         workspaceId = route.workspaceId,
                         workspaceRepository = container.workspaceRepository,
                         installedAppsRepository = container.installedAppsRepository,
+                        runtimeRegistry = container.runtimeRegistry,
                     )
                 )
                 WorkspaceDetailScreen(

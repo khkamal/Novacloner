@@ -33,6 +33,7 @@ data class Workspace(
     val description: String = "",
     val notes: String = "",
     val accentColor: WorkspaceAccent = WorkspaceAccent.COBALT,
+    val executionMode: ExecutionMode = ExecutionMode.HOST_DIRECT,
     val isPinned: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),

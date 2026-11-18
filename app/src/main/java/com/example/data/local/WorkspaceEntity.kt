@@ -3,6 +3,7 @@ package com.example.data.local
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.example.domain.model.ExecutionMode
 import com.example.domain.model.Workspace
 import com.example.domain.model.WorkspaceAccent
 
@@ -31,6 +32,7 @@ data class WorkspaceEntity(
     val description: String = "",
     val notes: String = "",
     val accentColorKey: String = WorkspaceAccent.COBALT.key,
+    val executionModeKey: String = ExecutionMode.HOST_DIRECT.key,
     val isPinned: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
@@ -52,6 +54,7 @@ fun WorkspaceEntity.toDomain(): Workspace = Workspace(
     description = description,
     notes = notes,
     accentColor = WorkspaceAccent.fromKey(accentColorKey),
+    executionMode = ExecutionMode.fromKey(executionModeKey),
     isPinned = isPinned,
     createdAt = createdAt,
     updatedAt = updatedAt,
@@ -73,6 +76,7 @@ fun Workspace.toEntity(): WorkspaceEntity = WorkspaceEntity(
     description = description,
     notes = notes,
     accentColorKey = accentColor.key,
+    executionModeKey = executionMode.key,
     isPinned = isPinned,
     createdAt = createdAt,
     updatedAt = updatedAt,

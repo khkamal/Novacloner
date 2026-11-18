@@ -8,6 +8,13 @@ import com.example.data.repository.InstalledAppsRepository
 import com.example.data.repository.SecretZoneRepository
 import com.example.data.repository.SettingsRepository
 import com.example.data.repository.WorkspaceRepository
+import com.example.data.runtime.AppCompatibilityAnalyzer
+import com.example.data.runtime.ContainerRuntimeRegistry
+import com.example.data.runtime.HostDirectRuntime
+import com.example.data.runtime.UnsupportedRuntime
+import com.example.data.runtime.WorkProfileDetector
+import com.example.data.runtime.WorkProfileRuntime
+import com.example.domain.model.ExecutionMode
 
 class AppContainer(application: Application) {
     private val database: NovaSpaceDatabase by lazy {
@@ -35,6 +42,37 @@ class AppContainer(application: Application) {
 
     val deviceInfoRepository: DeviceInfoRepository by lazy {
         DeviceInfoRepository(context = application)
+    }
+
+    val workProfileDetector: WorkProfileDetector by lazy {
+        WorkProfileDetector(application)
+    }
+
+    val appCompatibilityAnalyzer: AppCompatibilityAnalyzer by lazy {
+        AppCompatibilityAnalyzer(application)
+    }
+
+    val hostDirectRuntime: HostDirectRuntime by lazy {
+        HostDirectRuntime(application)
+    }
+
+    val workProfileRuntime: WorkProfileRuntime by lazy {
+        WorkProfileRuntime(workProfileDetector)
+    }
+
+    val runtimeRegistry: ContainerRuntimeRegistry by lazy {
+        ContainerRuntimeRegistry(
+            hostDirectRuntime = hostDirectRuntime,
+            workProfileRuntime = workProfileRuntime,
+            isolatedContainerRuntime = UnsupportedRuntime(
+                mode = ExecutionMode.ISOLATED_CONTAINER,
+                reason = "Isolated virtual container engine is not implemented in Phase 1.",
+            ),
+            unsupportedRuntime = UnsupportedRuntime(mode = ExecutionMode.UNSUPPORTED),
+            workProfileDetector = workProfileDetector,
+            compatibilityAnalyzer = appCompatibilityAnalyzer,
+            workspaceRepository = workspaceRepository,
+        )
     }
 
     val settingsRepository: SettingsRepository by lazy {

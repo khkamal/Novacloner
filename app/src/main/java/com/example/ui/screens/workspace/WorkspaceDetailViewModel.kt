@@ -6,10 +6,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.repository.InstalledAppsRepository
 import com.example.data.repository.WorkspaceRepository
+import com.example.data.runtime.ContainerRuntimeRegistry
 import com.example.domain.model.AppAvailability
 import com.example.domain.model.Workspace
-import com.example.utils.AppLaunchHelper
-import com.example.utils.LaunchResult
+import com.example.domain.runtime.ResolvedRuntimeState
+import com.example.domain.runtime.RuntimeLaunchResult
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,6 +24,7 @@ data class WorkspaceDetailUiState(
     val isLoading: Boolean = true,
     val workspace: Workspace? = null,
     val availability: AppAvailability = AppAvailability.NO_APP_LINKED,
+    val runtimeState: ResolvedRuntimeState? = null,
 )
 
 sealed interface WorkspaceDetailEvent {
@@ -34,20 +36,24 @@ class WorkspaceDetailViewModel(
     private val workspaceId: Long,
     private val workspaceRepository: WorkspaceRepository,
     private val installedAppsRepository: InstalledAppsRepository,
+    private val runtimeRegistry: ContainerRuntimeRegistry,
 ) : ViewModel() {
 
     private val availabilityFlow = MutableStateFlow(AppAvailability.NO_APP_LINKED)
+    private val runtimeStateFlow = MutableStateFlow<ResolvedRuntimeState?>(null)
     private val _events = MutableSharedFlow<WorkspaceDetailEvent>()
     val events = _events.asSharedFlow()
 
     val uiState: StateFlow<WorkspaceDetailUiState> = combine(
         workspaceRepository.observeWorkspace(workspaceId),
         availabilityFlow,
-    ) { workspace, availability ->
+        runtimeStateFlow,
+    ) { workspace, availability, runtimeState ->
         WorkspaceDetailUiState(
             isLoading = false,
             workspace = workspace,
             availability = availability,
+            runtimeState = runtimeState,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -71,21 +77,22 @@ class WorkspaceDetailViewModel(
                 installedAppsRepository.isAppInstalled(pkg) -> AppAvailability.AVAILABLE
                 else -> AppAvailability.UNAVAILABLE
             }
+            runtimeStateFlow.value = workspace?.let { runtimeRegistry.resolveRuntimeState(it) }
         }
     }
 
     fun launchAssociatedApp(context: Context) {
         val ws = uiState.value.workspace ?: return
         viewModelScope.launch {
-            when (val result = AppLaunchHelper.launchApp(context, ws.packageName)) {
-                LaunchResult.Success -> {
-                    workspaceRepository.recordAppLaunch(ws.id)
-                }
-                else -> {
+            when (val result = runtimeRegistry.launchWorkspaceApp(context, ws)) {
+                is RuntimeLaunchResult.Success -> Unit
+                is RuntimeLaunchResult.Blocked -> {
                     refreshAvailability(ws)
-                    _events.emit(
-                        WorkspaceDetailEvent.ShowMessage(AppLaunchHelper.messageForFailure(result))
-                    )
+                    _events.emit(WorkspaceDetailEvent.ShowMessage(result.reason))
+                }
+                is RuntimeLaunchResult.Failure -> {
+                    refreshAvailability(ws)
+                    _events.emit(WorkspaceDetailEvent.ShowMessage(result.reason))
                 }
             }
         }
@@ -142,6 +149,7 @@ class WorkspaceDetailViewModel(
         private val workspaceId: Long,
         private val workspaceRepository: WorkspaceRepository,
         private val installedAppsRepository: InstalledAppsRepository,
+        private val runtimeRegistry: ContainerRuntimeRegistry,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -149,6 +157,7 @@ class WorkspaceDetailViewModel(
                 workspaceId = workspaceId,
                 workspaceRepository = workspaceRepository,
                 installedAppsRepository = installedAppsRepository,
+                runtimeRegistry = runtimeRegistry,
             ) as T
         }
     }
