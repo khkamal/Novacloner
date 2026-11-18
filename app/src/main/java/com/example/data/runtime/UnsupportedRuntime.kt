@@ -2,6 +2,9 @@ package com.example.data.runtime
 
 import android.content.Context
 import com.example.domain.model.ExecutionMode
+import com.example.domain.model.IsolationVerificationReport
+import com.example.domain.model.IsolationVerificationStatus
+import com.example.domain.model.ProfileLaunchPath
 import com.example.domain.model.Workspace
 import com.example.domain.runtime.ContainerRuntime
 import com.example.domain.runtime.RuntimeCapabilities
@@ -19,6 +22,20 @@ class UnsupportedRuntime(
 ) : ContainerRuntime {
 
     override suspend fun probeCapabilities(packageName: String?): RuntimeCapabilities {
+        val verificationReport = IsolationVerificationReport(
+            status = IsolationVerificationStatus.UNSUPPORTED_CONTAINER_ENGINE,
+            launchPath = ProfileLaunchPath.UNAVAILABLE,
+            currentProfileLabel = "Current Host Profile",
+            targetAppInstalledInProfile = false,
+            launchPermittedInProfile = false,
+            profileHasOwnAppData = false,
+            isGenuineIsolationVerified = false,
+            verificationSummary = reason,
+            guidedSetupSteps = listOf(
+                "An in-process APK virtualization engine is not supported for non-privileged apps under Google Play Dynamic Code Loading policies.",
+                "Select \"Work Profile\" if you have provisioned a separate Android Work Profile outside NovaCloner, or \"Host App — Shared Data\" to launch the host app directly.",
+            ),
+        )
         return RuntimeCapabilities(
             mode = mode,
             displayLabel = mode.displayLabel,
@@ -30,6 +47,7 @@ class UnsupportedRuntime(
                 reason,
                 "Normal non-root Android apps cannot execute independent cloned APK sandboxes without OS or external runtime support.",
             ),
+            verificationReport = verificationReport,
         )
     }
 

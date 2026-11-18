@@ -7,7 +7,10 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.repository.InstalledAppsRepository
 import com.example.data.repository.WorkspaceRepository
 import com.example.data.runtime.ContainerRuntimeRegistry
+import com.example.data.runtime.ProfileSandboxManager
+import com.example.data.runtime.ProfileSandboxSnapshot
 import com.example.domain.model.AppAvailability
+import com.example.domain.model.ExecutionMode
 import com.example.domain.model.Workspace
 import com.example.domain.runtime.ResolvedRuntimeState
 import com.example.domain.runtime.RuntimeLaunchResult
@@ -25,6 +28,7 @@ data class WorkspaceDetailUiState(
     val workspace: Workspace? = null,
     val availability: AppAvailability = AppAvailability.NO_APP_LINKED,
     val runtimeState: ResolvedRuntimeState? = null,
+    val sandboxSnapshot: ProfileSandboxSnapshot? = null,
 )
 
 sealed interface WorkspaceDetailEvent {
@@ -37,10 +41,12 @@ class WorkspaceDetailViewModel(
     private val workspaceRepository: WorkspaceRepository,
     private val installedAppsRepository: InstalledAppsRepository,
     private val runtimeRegistry: ContainerRuntimeRegistry,
+    private val profileSandboxManager: ProfileSandboxManager,
 ) : ViewModel() {
 
     private val availabilityFlow = MutableStateFlow(AppAvailability.NO_APP_LINKED)
     private val runtimeStateFlow = MutableStateFlow<ResolvedRuntimeState?>(null)
+    private val sandboxSnapshotFlow = MutableStateFlow<ProfileSandboxSnapshot?>(null)
     private val _events = MutableSharedFlow<WorkspaceDetailEvent>()
     val events = _events.asSharedFlow()
 
@@ -48,12 +54,14 @@ class WorkspaceDetailViewModel(
         workspaceRepository.observeWorkspace(workspaceId),
         availabilityFlow,
         runtimeStateFlow,
-    ) { workspace, availability, runtimeState ->
+        sandboxSnapshotFlow,
+    ) { workspace, availability, runtimeState, sandbox ->
         WorkspaceDetailUiState(
             isLoading = false,
             workspace = workspace,
             availability = availability,
             runtimeState = runtimeState,
+            sandboxSnapshot = sandbox,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -62,6 +70,9 @@ class WorkspaceDetailViewModel(
     )
 
     init {
+        viewModelScope.launch {
+            sandboxSnapshotFlow.value = profileSandboxManager.readSnapshot()
+        }
         viewModelScope.launch {
             workspaceRepository.observeWorkspace(workspaceId).collect { ws ->
                 refreshAvailability(ws)
@@ -78,6 +89,27 @@ class WorkspaceDetailViewModel(
                 else -> AppAvailability.UNAVAILABLE
             }
             runtimeStateFlow.value = workspace?.let { runtimeRegistry.resolveRuntimeState(it) }
+            sandboxSnapshotFlow.value = profileSandboxManager.readSnapshot()
+        }
+    }
+
+    fun selectExecutionMode(mode: ExecutionMode) {
+        val ws = uiState.value.workspace ?: return
+        if (ws.executionMode == mode) return
+        viewModelScope.launch {
+            workspaceRepository.updateExecutionMode(ws.id, mode)
+            _events.emit(
+                WorkspaceDetailEvent.ShowMessage("Execution mode updated to ${mode.shortBadge}.")
+            )
+        }
+    }
+
+    fun incrementSandboxProbe() {
+        viewModelScope.launch {
+            sandboxSnapshotFlow.value = profileSandboxManager.incrementProbeCounter()
+            _events.emit(
+                WorkspaceDetailEvent.ShowMessage("Profile sandbox counter updated in current OS user storage.")
+            )
         }
     }
 
@@ -150,6 +182,7 @@ class WorkspaceDetailViewModel(
         private val workspaceRepository: WorkspaceRepository,
         private val installedAppsRepository: InstalledAppsRepository,
         private val runtimeRegistry: ContainerRuntimeRegistry,
+        private val profileSandboxManager: ProfileSandboxManager,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -158,6 +191,7 @@ class WorkspaceDetailViewModel(
                 workspaceRepository = workspaceRepository,
                 installedAppsRepository = installedAppsRepository,
                 runtimeRegistry = runtimeRegistry,
+                profileSandboxManager = profileSandboxManager,
             ) as T
         }
     }

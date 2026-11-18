@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -37,6 +39,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -70,8 +73,10 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.repository.InstalledAppsRepository
+import com.example.data.runtime.ProfileSandboxSnapshot
 import com.example.domain.model.AppAvailability
 import com.example.domain.model.CompatibilityStatus
+import com.example.domain.model.ExecutionMode
 import com.example.domain.model.Workspace
 import com.example.domain.runtime.ResolvedRuntimeState
 import com.example.ui.components.AppIconView
@@ -102,6 +107,8 @@ fun WorkspaceDetailScreen(
     var showEditNotesDialog by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showGuidedSetupDialog by remember { mutableStateOf(false) }
+    var showSandboxProbeDialog by remember { mutableStateOf(false) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -295,6 +302,7 @@ fun WorkspaceDetailScreen(
                         AssociatedAppSection(
                             workspace = workspace,
                             availability = uiState.availability,
+                            runtimeState = uiState.runtimeState,
                             installedAppsRepository = installedAppsRepository,
                             onLaunchApp = { viewModel.launchAssociatedApp(context) },
                             onChangeApp = { onChangeApp(workspace.id) },
@@ -303,7 +311,13 @@ fun WorkspaceDetailScreen(
 
                         // Execution Mode & Runtime Status Panel
                         uiState.runtimeState?.let { runtimeState ->
-                            ExecutionRuntimeSection(runtimeState = runtimeState)
+                            ExecutionRuntimeSection(
+                                workspace = workspace,
+                                runtimeState = runtimeState,
+                                onSelectExecutionMode = viewModel::selectExecutionMode,
+                                onOpenSetupGuide = { showGuidedSetupDialog = true },
+                                onOpenSandboxProbe = { showSandboxProbeDialog = true },
+                            )
                         }
 
                         // Notes Panel
@@ -519,12 +533,33 @@ fun WorkspaceDetailScreen(
             },
         )
     }
+
+    val currentRuntimeState = uiState.runtimeState
+    if (workspace != null && showGuidedSetupDialog && currentRuntimeState != null) {
+        WorkProfileSetupGuideDialog(
+            runtimeState = currentRuntimeState,
+            onSwitchToHostDirect = {
+                viewModel.selectExecutionMode(ExecutionMode.HOST_DIRECT)
+                showGuidedSetupDialog = false
+            },
+            onDismiss = { showGuidedSetupDialog = false },
+        )
+    }
+
+    if (workspace != null && showSandboxProbeDialog) {
+        ProfileSandboxProbeDialog(
+            snapshot = uiState.sandboxSnapshot,
+            onIncrementCounter = viewModel::incrementSandboxProbe,
+            onDismiss = { showSandboxProbeDialog = false },
+        )
+    }
 }
 
 @Composable
 private fun AssociatedAppSection(
     workspace: Workspace,
     availability: AppAvailability,
+    runtimeState: ResolvedRuntimeState?,
     installedAppsRepository: InstalledAppsRepository,
     onLaunchApp: () -> Unit,
     onChangeApp: () -> Unit,
@@ -626,9 +661,16 @@ private fun AssociatedAppSection(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    val launchEnabled = runtimeState?.canLaunch ?: (availability == AppAvailability.AVAILABLE)
+                    val launchLabel = when {
+                        runtimeState == null -> "Launch App"
+                        !runtimeState.canLaunch && !workspace.packageName.isNullOrBlank() -> "Launch Blocked"
+                        runtimeState.isVirtualized -> "Launch Isolated"
+                        else -> "Launch App"
+                    }
                     Button(
                         onClick = onLaunchApp,
-                        enabled = availability == AppAvailability.AVAILABLE,
+                        enabled = launchEnabled,
                         modifier = Modifier
                             .weight(1f)
                             .testTag("detail_launch_app_button"),
@@ -639,7 +681,7 @@ private fun AssociatedAppSection(
                             modifier = Modifier.size(18.dp),
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Launch App")
+                        Text(launchLabel)
                     }
 
                     FilledTonalButton(
@@ -671,8 +713,15 @@ private fun AssociatedAppSection(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ExecutionRuntimeSection(runtimeState: ResolvedRuntimeState) {
+private fun ExecutionRuntimeSection(
+    workspace: Workspace,
+    runtimeState: ResolvedRuntimeState,
+    onSelectExecutionMode: (ExecutionMode) -> Unit,
+    onOpenSetupGuide: () -> Unit,
+    onOpenSandboxProbe: () -> Unit,
+) {
     val badgeBg = if (runtimeState.isVirtualized) {
         NovaTheme.colors.successContainer
     } else {
@@ -709,12 +758,33 @@ private fun ExecutionRuntimeSection(runtimeState: ResolvedRuntimeState) {
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
                         .background(badgeBg)
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .testTag("detail_isolation_badge"),
                 ) {
                     Text(
-                        text = if (runtimeState.isVirtualized) "Isolated" else "Not Virtualized",
+                        text = if (runtimeState.isVirtualized) "Verified Isolated" else "Not Virtualized",
                         style = MaterialTheme.typography.labelSmall,
                         color = badgeFg,
+                    )
+                }
+            }
+
+            // Execution mode selector preserving truthful backend selection
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                listOf(
+                    ExecutionMode.HOST_DIRECT,
+                    ExecutionMode.WORK_PROFILE,
+                    ExecutionMode.ISOLATED_CONTAINER,
+                ).forEach { mode ->
+                    FilterChip(
+                        selected = workspace.executionMode == mode,
+                        onClick = { onSelectExecutionMode(mode) },
+                        label = { Text(mode.shortBadge) },
+                        modifier = Modifier.testTag("execution_mode_chip_${mode.key}"),
                     )
                 }
             }
@@ -725,23 +795,38 @@ private fun ExecutionRuntimeSection(runtimeState: ResolvedRuntimeState) {
                 valueTag = "detail_execution_mode_value",
             )
             MetadataLine(
-                label = "Runtime Status",
-                value = runtimeState.runtimeStatusLabel,
-                valueTag = "detail_runtime_status_value",
+                label = "Runtime Availability",
+                value = runtimeState.runtimeAvailabilityLabel,
+                valueTag = "detail_runtime_availability_value",
+            )
+            MetadataLine(
+                label = "Profile Availability",
+                value = runtimeState.profileAvailabilityLabel,
+                valueTag = "detail_profile_availability_value",
+            )
+            MetadataLine(
+                label = "Target App in Profile",
+                value = runtimeState.targetAppStatusInProfileLabel,
+                valueTag = "detail_target_app_profile_status_value",
+            )
+            MetadataLine(
+                label = "Launch Capability",
+                value = runtimeState.launchCapabilityLabel,
+                valueTag = "detail_launch_capability_value",
+            )
+            MetadataLine(
+                label = "Isolation Status",
+                value = runtimeState.isolationStatusLabel,
+                valueTag = "detail_isolation_status_value",
             )
             MetadataLine(
                 label = "Isolated App Data",
                 value = if (runtimeState.providesIsolatedAppData) {
-                    "Yes — Isolated sandbox storage"
+                    "Yes — Separate OS profile storage"
                 } else {
                     "No — Uses shared host app storage"
                 },
                 valueTag = "detail_isolated_data_value",
-            )
-            MetadataLine(
-                label = "Profile Detection",
-                value = runtimeState.workProfileProbe.capabilitySummary,
-                valueTag = "detail_work_profile_probe_value",
             )
 
             Text(
@@ -749,6 +834,30 @@ private fun ExecutionRuntimeSection(runtimeState: ResolvedRuntimeState) {
                 style = MaterialTheme.typography.bodySmall,
                 color = NovaTheme.colors.secondaryText,
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (runtimeState.isolationVerification.guidedSetupSteps.isNotEmpty()) {
+                    FilledTonalButton(
+                        onClick = onOpenSetupGuide,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("detail_work_profile_guide_button"),
+                    ) {
+                        Text("Setup Guide")
+                    }
+                }
+                OutlinedButton(
+                    onClick = onOpenSandboxProbe,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("detail_sandbox_probe_button"),
+                ) {
+                    Text("Profile Sandbox")
+                }
+            }
 
             if (runtimeState.limitations.isNotEmpty()) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
@@ -868,6 +977,106 @@ private fun EditNotesDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Cancel")
+            }
+        },
+    )
+}
+
+@Composable
+private fun WorkProfileSetupGuideDialog(
+    runtimeState: ResolvedRuntimeState,
+    onSwitchToHostDirect: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Profile Isolation Setup Guide") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = runtimeState.isolationVerification.verificationSummary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                HorizontalDivider()
+                runtimeState.isolationVerification.guidedSetupSteps.forEachIndexed { index, step ->
+                    Text(
+                        text = "${index + 1}. $step",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NovaTheme.colors.secondaryText,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("close_setup_guide_button"),
+            ) {
+                Text("Close")
+            }
+        },
+        dismissButton = {
+            if (runtimeState.requestedMode != ExecutionMode.HOST_DIRECT) {
+                TextButton(
+                    onClick = onSwitchToHostDirect,
+                    modifier = Modifier.testTag("switch_to_host_direct_button"),
+                ) {
+                    Text("Use Host App")
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun ProfileSandboxProbeDialog(
+    snapshot: ProfileSandboxSnapshot?,
+    onIncrementCounter: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("OS Profile Sandbox Probe") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "Live OS environment metrics for the currently running profile instance. Compare these values between Personal Profile and Work Profile installations to verify genuine Android UID & storage isolation.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NovaTheme.colors.secondaryText,
+                )
+                HorizontalDivider()
+                if (snapshot == null) {
+                    Text(
+                        text = "Reading sandbox state…",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    MetadataLine("User Serial", "#${snapshot.userSerialNumber}")
+                    MetadataLine("Linux UID", "${snapshot.linuxUid}")
+                    MetadataLine("Instance Token", snapshot.instanceToken)
+                    MetadataLine("Probe Counter", "${snapshot.probeCounter}")
+                    MetadataLine("App Files Dir", snapshot.filesDirPath)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onIncrementCounter,
+                modifier = Modifier.testTag("increment_sandbox_probe_button"),
+            ) {
+                Text("Write Probe Marker")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
             }
         },
     )

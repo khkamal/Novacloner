@@ -2,6 +2,9 @@ package com.example.data.runtime
 
 import android.content.Context
 import com.example.domain.model.ExecutionMode
+import com.example.domain.model.IsolationVerificationReport
+import com.example.domain.model.IsolationVerificationStatus
+import com.example.domain.model.ProfileLaunchPath
 import com.example.domain.model.Workspace
 import com.example.domain.runtime.ContainerRuntime
 import com.example.domain.runtime.RuntimeCapabilities
@@ -37,6 +40,19 @@ class HostDirectRuntime(
                 else -> "Operational — launches host installation directly via PackageManager."
             }
 
+            val verificationReport = IsolationVerificationReport(
+                status = IsolationVerificationStatus.HOST_SHARED_DATA,
+                launchPath = if (launchable) ProfileLaunchPath.HOST_PACKAGE_MANAGER else ProfileLaunchPath.UNAVAILABLE,
+                currentProfileLabel = "Current Host Profile",
+                targetProfileLabel = "Current Host Profile (Same User)",
+                targetAppInstalledInProfile = installed,
+                launchPermittedInProfile = launchable,
+                profileHasOwnAppData = false,
+                isGenuineIsolationVerified = false,
+                verificationSummary = "Launches the single host installation in your current Android profile with shared app data.",
+                guidedSetupSteps = emptyList(),
+            )
+
             RuntimeCapabilities(
                 mode = ExecutionMode.HOST_DIRECT,
                 displayLabel = ExecutionMode.HOST_DIRECT.displayLabel,
@@ -45,6 +61,7 @@ class HostDirectRuntime(
                 isVirtualized = false,
                 statusMessage = statusMessage,
                 limitations = HOST_LIMITATIONS,
+                verificationReport = verificationReport,
             )
         }
 

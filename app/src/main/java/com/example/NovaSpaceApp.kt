@@ -11,6 +11,7 @@ import com.example.data.repository.WorkspaceRepository
 import com.example.data.runtime.AppCompatibilityAnalyzer
 import com.example.data.runtime.ContainerRuntimeRegistry
 import com.example.data.runtime.HostDirectRuntime
+import com.example.data.runtime.ProfileSandboxManager
 import com.example.data.runtime.UnsupportedRuntime
 import com.example.data.runtime.WorkProfileDetector
 import com.example.data.runtime.WorkProfileRuntime
@@ -52,12 +53,19 @@ class AppContainer(application: Application) {
         AppCompatibilityAnalyzer(application)
     }
 
+    val profileSandboxManager: ProfileSandboxManager by lazy {
+        ProfileSandboxManager(application)
+    }
+
     val hostDirectRuntime: HostDirectRuntime by lazy {
         HostDirectRuntime(application)
     }
 
     val workProfileRuntime: WorkProfileRuntime by lazy {
-        WorkProfileRuntime(workProfileDetector)
+        WorkProfileRuntime(
+            workProfileDetector = workProfileDetector,
+            launchBackend = WorkProfileRuntime.AndroidProfileLaunchBackend(application),
+        )
     }
 
     val runtimeRegistry: ContainerRuntimeRegistry by lazy {
@@ -66,7 +74,7 @@ class AppContainer(application: Application) {
             workProfileRuntime = workProfileRuntime,
             isolatedContainerRuntime = UnsupportedRuntime(
                 mode = ExecutionMode.ISOLATED_CONTAINER,
-                reason = "Isolated virtual container engine is not implemented in Phase 1.",
+                reason = "In-process APK container virtualization is unavailable on non-privileged Android without violating Play Dynamic Code Loading policies.",
             ),
             unsupportedRuntime = UnsupportedRuntime(mode = ExecutionMode.UNSUPPORTED),
             workProfileDetector = workProfileDetector,

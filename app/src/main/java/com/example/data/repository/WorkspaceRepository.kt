@@ -231,6 +231,21 @@ class WorkspaceRepository(private val workspaceDao: WorkspaceDao) {
         }
     }
 
+    suspend fun updateExecutionMode(
+        id: Long,
+        executionMode: ExecutionMode,
+    ) = withContext(Dispatchers.IO) {
+        writeMutex.withLock {
+            val existing = workspaceDao.getWorkspaceById(id) ?: return@withLock
+            workspaceDao.updateWorkspace(
+                existing.copy(
+                    executionModeKey = executionMode.key,
+                    updatedAt = System.currentTimeMillis(),
+                )
+            )
+        }
+    }
+
     suspend fun togglePin(id: Long) = withContext(Dispatchers.IO) {
         writeMutex.withLock {
             val existing = workspaceDao.getWorkspaceById(id) ?: return@withLock
@@ -332,6 +347,7 @@ class WorkspaceRepository(private val workspaceDao: WorkspaceDao) {
                     description = "",
                     notes = "",
                     accentColorKey = WorkspaceAccent.COBALT.key,
+                    executionModeKey = ExecutionMode.HOST_DIRECT.key,
                     isPinned = false,
                     launchCount = 0,
                     lastLaunchedAt = null,

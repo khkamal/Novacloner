@@ -3,6 +3,7 @@ package com.example.domain.runtime
 import android.content.Context
 import com.example.domain.model.AppCompatibilityReport
 import com.example.domain.model.ExecutionMode
+import com.example.domain.model.IsolationVerificationReport
 import com.example.domain.model.WorkProfileProbeResult
 import com.example.domain.model.Workspace
 import com.example.utils.LaunchResult
@@ -15,6 +16,7 @@ data class RuntimeCapabilities(
     val isVirtualized: Boolean,
     val statusMessage: String,
     val limitations: List<String>,
+    val verificationReport: IsolationVerificationReport? = null,
 )
 
 sealed interface RuntimeProvisionResult {
@@ -57,6 +59,11 @@ data class ResolvedRuntimeState(
     val effectiveMode: ExecutionMode,
     val executionModeLabel: String,
     val runtimeStatusLabel: String,
+    val runtimeAvailabilityLabel: String,
+    val profileAvailabilityLabel: String,
+    val targetAppStatusInProfileLabel: String,
+    val launchCapabilityLabel: String,
+    val isolationStatusLabel: String,
     val isRuntimeOperational: Boolean,
     val providesIsolatedAppData: Boolean,
     val isVirtualized: Boolean,
@@ -65,6 +72,7 @@ data class ResolvedRuntimeState(
     val statusDetail: String,
     val limitations: List<String>,
     val workProfileProbe: WorkProfileProbeResult,
+    val isolationVerification: IsolationVerificationReport,
     val compatibilityReport: AppCompatibilityReport? = null,
 )
 

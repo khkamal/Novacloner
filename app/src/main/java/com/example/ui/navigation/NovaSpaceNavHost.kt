@@ -144,6 +144,7 @@ fun NovaSpaceNavHost(
                         workspaceRepository = container.workspaceRepository,
                         installedAppsRepository = container.installedAppsRepository,
                         runtimeRegistry = container.runtimeRegistry,
+                        profileSandboxManager = container.profileSandboxManager,
                     )
                 )
                 WorkspaceDetailScreen(

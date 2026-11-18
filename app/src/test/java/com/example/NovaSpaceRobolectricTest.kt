@@ -1,6 +1,7 @@
 package com.example
 
 import android.content.ClipboardManager
+import android.content.ComponentName
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.os.UserHandle
@@ -22,12 +23,15 @@ import com.example.data.repository.WorkspaceRepository
 import com.example.data.runtime.AppCompatibilityAnalyzer
 import com.example.data.runtime.ContainerRuntimeRegistry
 import com.example.data.runtime.HostDirectRuntime
+import com.example.data.runtime.ProfileSandboxManager
 import com.example.data.runtime.UnsupportedRuntime
 import com.example.data.runtime.WorkProfileDetector
 import com.example.data.runtime.WorkProfileRuntime
 import com.example.domain.model.CompatibilityStatus
 import com.example.domain.model.DefaultWorkspaceBehavior
 import com.example.domain.model.ExecutionMode
+import com.example.domain.model.IsolationVerificationStatus
+import com.example.domain.model.ProfileLaunchPath
 import com.example.domain.model.SecretRecordCategory
 import com.example.domain.model.ThemeMode
 import com.example.domain.model.Workspace
@@ -687,7 +691,7 @@ class NovaSpaceRobolectricTest {
         }
         assertNotEquals(focusBefore.generatedWorkspaceId, secondBefore.generatedWorkspaceId)
 
-        // Open Focus Space -> Detail -> verify Execution & Runtime card -> Workspace Device Info
+        // Open Focus Space -> Detail -> verify Execution & Runtime card -> test mode switch, Setup Guide & Sandbox Probe -> Workspace Device Info
         composeRule.onNodeWithText("Focus Space").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("detail_execution_runtime_card").fetchSemanticsNodes().isNotEmpty()
@@ -696,11 +700,39 @@ class NovaSpaceRobolectricTest {
         composeRule.onNodeWithText("Not Virtualized").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Host App — Shared Data").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("detail_isolated_data_value").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("detail_isolation_status_value").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("detail_compatibility_status_value").performScrollTo().assertIsDisplayed()
+
+        // Switch execution mode to Work Profile -> verify Setup Guide appears -> use Use Host App quick action
+        composeRule.onNodeWithTag("execution_mode_chip_work_profile").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("detail_work_profile_guide_button").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Workspace Notes").performScrollTo()
+        composeRule.onNodeWithTag("detail_work_profile_guide_button").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Profile Isolation Setup Guide").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("switch_to_host_direct_button").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Host App — Shared Data").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        // Open Profile Sandbox Probe dialog and write a marker
+        composeRule.onNodeWithText("Workspace Notes").performScrollTo()
+        composeRule.onNodeWithTag("detail_sandbox_probe_button").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("OS Profile Sandbox Probe").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("increment_sandbox_probe_button").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Close").performClick()
+        composeRule.waitForIdle()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("detail_device_info_button").fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.onNodeWithText("Manage Workspace").performScrollTo()
         composeRule.onNodeWithTag("detail_device_info_button").performScrollTo().performClick()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -1009,16 +1041,30 @@ class NovaSpaceRobolectricTest {
             executionMode = ExecutionMode.ISOLATED_CONTAINER,
         )
 
+        // Phase 2 never silently launches the host app when ISOLATED_CONTAINER is requested;
+        // it reports UNSUPPORTED honestly and blocks launching without calling the unimplemented engine.
         val resolved = registry.resolveRuntimeState(isolatedRequestWs)
         assertEquals(ExecutionMode.ISOLATED_CONTAINER, resolved.requestedMode)
-        assertEquals(ExecutionMode.HOST_DIRECT, resolved.effectiveMode)
-        assertTrue(resolved.fallbackApplied)
+        assertEquals(ExecutionMode.UNSUPPORTED, resolved.effectiveMode)
+        assertEquals(
+            IsolationVerificationStatus.UNSUPPORTED_CONTAINER_ENGINE,
+            resolved.isolationVerification.status,
+        )
         assertFalse(resolved.isVirtualized)
         assertFalse(resolved.providesIsolatedAppData)
+        assertFalse(resolved.canLaunch)
 
         val launchResult = registry.launchWorkspaceApp(context, isolatedRequestWs)
-        assertTrue(launchResult is RuntimeLaunchResult.Success)
+        assertTrue(launchResult is RuntimeLaunchResult.Blocked)
         assertFalse(unimplementedLaunchCalled)
+
+        // When user explicitly selects HOST_DIRECT, HostDirectRuntime launches cleanly
+        val hostFallbackWs = isolatedRequestWs.copy(executionMode = ExecutionMode.HOST_DIRECT)
+        val hostResolved = registry.resolveRuntimeState(hostFallbackWs)
+        assertEquals(ExecutionMode.HOST_DIRECT, hostResolved.effectiveMode)
+        assertFalse(hostResolved.isVirtualized)
+        assertTrue(hostResolved.canLaunch)
+        assertTrue(registry.launchWorkspaceApp(context, hostFallbackWs) is RuntimeLaunchResult.Success)
 
         val unsupportedWs = isolatedRequestWs.copy(executionMode = ExecutionMode.UNSUPPORTED)
         val unsupportedState = registry.resolveRuntimeState(unsupportedWs)
@@ -1031,17 +1077,17 @@ class NovaSpaceRobolectricTest {
     @Test
     fun `read only work profile detector handles inaccessible and restricted profiles honestly`(): Unit = runBlocking {
         val currentHandle = android.os.Process.myUserHandle()
-        val secondaryParcel = android.os.Parcel.obtain()
-        secondaryParcel.writeInt(10)
-        secondaryParcel.setDataPosition(0)
-        val secondaryHandle = UserHandle.readFromParcel(secondaryParcel)
-        secondaryParcel.recycle()
+        val secondaryHandle = createUserHandle(10)
 
         val restrictedBackend = object : WorkProfileDetector.ProfileInspectionBackend {
             override fun myUserHandle(): UserHandle = currentHandle
             override fun getUserProfiles(): List<UserHandle> = listOf(currentHandle, secondaryHandle)
+            override fun getUserSerialNumber(userHandle: UserHandle): Long =
+                if (userHandle == currentHandle) 0L else 10L
             override fun getCrossProfileTargets(): List<UserHandle> = emptyList()
             override fun isCrossProfileApiSupported(): Boolean = true
+            override fun canInteractAcrossProfiles(): Boolean = false
+            override fun canRequestInteractAcrossProfiles(): Boolean = false
             override fun hasShortcutHostPermission(): Boolean = false
             override fun canQueryActivitiesInProfile(
                 userHandle: UserHandle,
@@ -1051,13 +1097,18 @@ class NovaSpaceRobolectricTest {
         }
 
         val restrictedDetector = WorkProfileDetector(context, restrictedBackend)
-        val restrictedProbe = restrictedDetector.inspect(context.packageName)
-        assertTrue(restrictedProbe.secondaryProfileDetected)
-        assertFalse(restrictedProbe.secondaryProfileQueryAccessible)
-        assertFalse(restrictedProbe.canLaunchExternalAppAcrossProfiles)
+        val restrictedEval = restrictedDetector.verifyWorkProfileIsolation("com.example.otherapp")
+        assertTrue(restrictedEval.probe.secondaryProfileDetected)
+        assertFalse(restrictedEval.probe.secondaryProfileQueryAccessible)
+        assertFalse(restrictedEval.probe.canLaunchExternalAppAcrossProfiles)
+        assertEquals(
+            IsolationVerificationStatus.PROFILE_ACCESS_RESTRICTED,
+            restrictedEval.verification.status,
+        )
+        assertFalse(restrictedEval.verification.isGenuineIsolationVerified)
 
         val restrictedRuntime = WorkProfileRuntime(restrictedDetector)
-        val restrictedCaps = restrictedRuntime.probeCapabilities(context.packageName)
+        val restrictedCaps = restrictedRuntime.probeCapabilities("com.example.otherapp")
         assertFalse(restrictedCaps.isOperational)
         assertFalse(restrictedCaps.providesIsolatedAppData)
         assertFalse(restrictedCaps.isVirtualized)
@@ -1065,22 +1116,36 @@ class NovaSpaceRobolectricTest {
         val visibleNoLauncherBackend = object : WorkProfileDetector.ProfileInspectionBackend {
             override fun myUserHandle(): UserHandle = currentHandle
             override fun getUserProfiles(): List<UserHandle> = listOf(currentHandle, secondaryHandle)
-            override fun getCrossProfileTargets(): List<UserHandle> = listOf(secondaryHandle)
+            override fun getUserSerialNumber(userHandle: UserHandle): Long =
+                if (userHandle == currentHandle) 0L else 10L
+            override fun getCrossProfileTargets(): List<UserHandle> = emptyList()
             override fun isCrossProfileApiSupported(): Boolean = true
+            override fun canInteractAcrossProfiles(): Boolean = false
+            override fun canRequestInteractAcrossProfiles(): Boolean = false
             override fun hasShortcutHostPermission(): Boolean = false
             override fun canQueryActivitiesInProfile(
                 userHandle: UserHandle,
                 packageName: String?,
             ): WorkProfileDetector.ProfileQueryOutcome =
-                WorkProfileDetector.ProfileQueryOutcome.Accessible(targetPackagePresent = true)
+                WorkProfileDetector.ProfileQueryOutcome.Accessible(
+                    targetPackagePresent = true,
+                    resolvedComponent = ComponentName("com.example.otherapp", "com.example.otherapp.MainActivity"),
+                )
         }
 
         val visibleDetector = WorkProfileDetector(context, visibleNoLauncherBackend)
-        val visibleProbe = visibleDetector.inspect(context.packageName)
-        assertTrue(visibleProbe.secondaryProfileDetected)
-        assertTrue(visibleProbe.secondaryProfileQueryAccessible)
-        assertTrue(visibleProbe.targetAppVisibleInSecondaryProfile)
-        assertFalse(visibleProbe.canLaunchExternalAppAcrossProfiles)
+        val visibleEval = visibleDetector.verifyWorkProfileIsolation("com.example.otherapp")
+        assertTrue(visibleEval.probe.secondaryProfileDetected)
+        assertTrue(visibleEval.probe.secondaryProfileQueryAccessible)
+        assertTrue(visibleEval.probe.targetAppVisibleInSecondaryProfile)
+        assertFalse(visibleEval.probe.canLaunchExternalAppAcrossProfiles)
+        assertEquals(
+            IsolationVerificationStatus.CROSS_PROFILE_LAUNCH_RESTRICTED,
+            visibleEval.verification.status,
+        )
+        assertTrue(visibleEval.verification.profileHasOwnAppData)
+        assertFalse(visibleEval.verification.launchPermittedInProfile)
+        assertFalse(visibleEval.verification.isGenuineIsolationVerified)
 
         val analyzer = AppCompatibilityAnalyzer(context)
         val selfReport = analyzer.analyze(context.packageName)!!
@@ -1092,5 +1157,154 @@ class NovaSpaceRobolectricTest {
         assertFalse(missingReport.isInstalled)
         assertEquals(CompatibilityStatus.UNAVAILABLE, missingReport.status)
         assertTrue(missingReport.warnings.isNotEmpty())
+    }
+
+    @Test
+    fun `work profile runtime verifies genuine cross profile isolation and blocks unverified launches`(): Unit = runBlocking {
+        val currentHandle = android.os.Process.myUserHandle()
+        val secondaryHandle = createUserHandle(10)
+
+        var ownLaunchUser: UserHandle? = null
+        var externalLaunchComponent: ComponentName? = null
+
+        val fakeLaunchBackend = object : WorkProfileRuntime.ProfileLaunchBackend {
+            override fun launchOwnActivityInProfile(componentName: ComponentName, targetUser: UserHandle) {
+                ownLaunchUser = targetUser
+            }
+
+            override fun launchExternalActivityInProfile(componentName: ComponentName, targetUser: UserHandle) {
+                externalLaunchComponent = componentName
+            }
+        }
+
+        // 1. Self-companion app installed in Work Profile -> verified via CrossProfileApps
+        val crossProfileSelfBackend = object : WorkProfileDetector.ProfileInspectionBackend {
+            override fun myUserHandle(): UserHandle = currentHandle
+            override fun getUserProfiles(): List<UserHandle> = listOf(currentHandle, secondaryHandle)
+            override fun getUserSerialNumber(userHandle: UserHandle): Long =
+                if (userHandle == currentHandle) 0L else 10L
+            override fun getCrossProfileTargets(): List<UserHandle> = listOf(secondaryHandle)
+            override fun isCrossProfileApiSupported(): Boolean = true
+            override fun canInteractAcrossProfiles(): Boolean = true
+            override fun canRequestInteractAcrossProfiles(): Boolean = false
+            override fun hasShortcutHostPermission(): Boolean = false
+            override fun canQueryActivitiesInProfile(
+                userHandle: UserHandle,
+                packageName: String?,
+            ): WorkProfileDetector.ProfileQueryOutcome =
+                WorkProfileDetector.ProfileQueryOutcome.Accessible(
+                    targetPackagePresent = packageName == context.packageName,
+                    resolvedComponent = ComponentName(context.packageName, MainActivity::class.java.name),
+                )
+        }
+
+        val selfDetector = WorkProfileDetector(context, crossProfileSelfBackend)
+        val selfRuntime = WorkProfileRuntime(selfDetector, fakeLaunchBackend)
+        val registrySelf = ContainerRuntimeRegistry(
+            hostDirectRuntime = HostDirectRuntime(context),
+            workProfileRuntime = selfRuntime,
+            workProfileDetector = selfDetector,
+            compatibilityAnalyzer = AppCompatibilityAnalyzer(context),
+            workspaceRepository = workspaceRepo,
+        )
+
+        val wsId = workspaceRepo.createWorkspace(
+            name = "Work Companion",
+            packageName = context.packageName,
+            appDisplayName = "Nova Space",
+        )
+        workspaceRepo.updateExecutionMode(wsId, ExecutionMode.WORK_PROFILE)
+        val ws = workspaceRepo.getWorkspace(wsId)!!
+        assertEquals(ExecutionMode.WORK_PROFILE, ws.executionMode)
+
+        val resolvedSelf = registrySelf.resolveRuntimeState(ws)
+        assertEquals(ExecutionMode.WORK_PROFILE, resolvedSelf.effectiveMode)
+        assertTrue(resolvedSelf.isVirtualized)
+        assertTrue(resolvedSelf.providesIsolatedAppData)
+        assertTrue(resolvedSelf.canLaunch)
+        assertEquals(
+            IsolationVerificationStatus.VERIFIED_WORK_PROFILE,
+            resolvedSelf.isolationVerification.status,
+        )
+        assertEquals(ProfileLaunchPath.CROSS_PROFILE_APPS, resolvedSelf.isolationVerification.launchPath)
+
+        val selfLaunch = registrySelf.launchWorkspaceApp(context, ws)
+        assertTrue(selfLaunch is RuntimeLaunchResult.Success)
+        assertEquals(secondaryHandle, ownLaunchUser)
+        assertEquals(1, workspaceRepo.getWorkspace(wsId)!!.launchCount)
+
+        // 2. Third-party app installed in Work Profile with shortcut host permission -> verified via LauncherApps
+        val externalPkg = "com.example.worktestapp"
+        val externalComp = ComponentName(externalPkg, "com.example.worktestapp.TestActivity")
+        val authorizedLauncherBackend = object : WorkProfileDetector.ProfileInspectionBackend {
+            override fun myUserHandle(): UserHandle = currentHandle
+            override fun getUserProfiles(): List<UserHandle> = listOf(currentHandle, secondaryHandle)
+            override fun getUserSerialNumber(userHandle: UserHandle): Long =
+                if (userHandle == currentHandle) 0L else 10L
+            override fun getCrossProfileTargets(): List<UserHandle> = emptyList()
+            override fun isCrossProfileApiSupported(): Boolean = true
+            override fun canInteractAcrossProfiles(): Boolean = false
+            override fun canRequestInteractAcrossProfiles(): Boolean = false
+            override fun hasShortcutHostPermission(): Boolean = true
+            override fun canQueryActivitiesInProfile(
+                userHandle: UserHandle,
+                packageName: String?,
+            ): WorkProfileDetector.ProfileQueryOutcome =
+                WorkProfileDetector.ProfileQueryOutcome.Accessible(
+                    targetPackagePresent = packageName == externalPkg,
+                    resolvedComponent = if (packageName == externalPkg) externalComp else null,
+                )
+        }
+
+        val extDetector = WorkProfileDetector(context, authorizedLauncherBackend)
+        val extRuntime = WorkProfileRuntime(extDetector, fakeLaunchBackend)
+        val registryExt = ContainerRuntimeRegistry(
+            hostDirectRuntime = HostDirectRuntime(context),
+            workProfileRuntime = extRuntime,
+            workProfileDetector = extDetector,
+            compatibilityAnalyzer = AppCompatibilityAnalyzer(context),
+            workspaceRepository = workspaceRepo,
+        )
+
+        val extWs = ws.copy(packageName = externalPkg, appDisplayName = "Work Test App")
+        val extResolved = registryExt.resolveRuntimeState(extWs)
+        assertTrue(extResolved.isVirtualized)
+        assertEquals(ProfileLaunchPath.LAUNCHER_APPS, extResolved.isolationVerification.launchPath)
+        val extLaunch = registryExt.launchWorkspaceApp(context, extWs)
+        assertTrue(extLaunch is RuntimeLaunchResult.Success)
+        assertEquals(externalComp, externalLaunchComponent)
+
+        // 3. Target app missing in Work Profile -> blocked honestly with guided steps
+        val missingExtWs = ws.copy(packageName = "com.example.not_in_work_profile")
+        val missingExtResolved = registryExt.resolveRuntimeState(missingExtWs)
+        assertFalse(missingExtResolved.isVirtualized)
+        assertFalse(missingExtResolved.canLaunch)
+        assertEquals(
+            IsolationVerificationStatus.APP_NOT_INSTALLED_IN_PROFILE,
+            missingExtResolved.isolationVerification.status,
+        )
+        assertTrue(missingExtResolved.isolationVerification.guidedSetupSteps.isNotEmpty())
+        assertTrue(registryExt.launchWorkspaceApp(context, missingExtWs) is RuntimeLaunchResult.Blocked)
+    }
+
+    @Test
+    fun `profile sandbox manager persists profile local marker and increments counter`(): Unit = runBlocking {
+        val sandboxManager = ProfileSandboxManager(context)
+        val first = sandboxManager.readSnapshot()
+        assertEquals(context.packageName, first.packageName)
+        assertTrue(first.instanceToken.isNotBlank())
+        assertTrue(first.probeCounter >= 1)
+        assertTrue(first.filesDirPath.isNotBlank())
+
+        val incremented = sandboxManager.incrementProbeCounter()
+        assertEquals(first.instanceToken, incremented.instanceToken)
+        assertEquals(first.probeCounter + 1, incremented.probeCounter)
+    }
+
+    private fun createUserHandle(userId: Int): UserHandle {
+        val parcel = android.os.Parcel.obtain()
+        parcel.writeInt(userId)
+        parcel.setDataPosition(0)
+        return UserHandle.readFromParcel(parcel).also { parcel.recycle() }
     }
 }

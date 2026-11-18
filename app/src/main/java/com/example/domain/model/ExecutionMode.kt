@@ -36,15 +36,21 @@ enum class ExecutionMode(
 
 data class WorkProfileProbeResult(
     val totalAccessibleProfiles: Int = 1,
+    val currentProfileSerial: Long = 0L,
+    val secondaryProfileSerials: List<Long> = emptyList(),
+    val selectedTargetSerial: Long? = null,
     val secondaryProfileDetected: Boolean = false,
     val secondaryProfileQueryAccessible: Boolean = false,
     val targetAppVisibleInSecondaryProfile: Boolean = false,
+    val selfInstalledInSecondaryProfile: Boolean = false,
     val crossProfileApiAvailable: Boolean = false,
     val crossProfileTargetCount: Int = 0,
+    val crossProfileCanInteract: Boolean = false,
+    val crossProfileCanRequestPermission: Boolean = false,
     val hasLauncherShortcutPermission: Boolean = false,
     val canLaunchExternalAppAcrossProfiles: Boolean = false,
     val capabilitySummary: String = "Only the primary personal profile is accessible.",
-    val limitationNote: String = "Work Profile provisioning is disabled in Phase 1; detection is read-only.",
+    val limitationNote: String = "Work Profile provisioning cannot be triggered automatically by a non-DPC app.",
 )
 
 enum class CompatibilityStatus(val label: String) {
