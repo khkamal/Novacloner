@@ -1,0 +1,6 @@
+{
+  "name": "Nova Space",
+  "description": "Offline-first Android multi-instance workspace manager, app launcher, and PIN-protected Secret Zone.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

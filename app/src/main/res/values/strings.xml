@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">Nova Space</string>
+    <string name="secret_zone_title">Secret Zone</string>
+    <string name="secret_zone_subtitle">Private workspace</string>
+    <string name="empty_workspace_title">Create your first workspace.</string>
+    <string name="empty_workspace_subtitle">Organize installed apps, notes, and launch shortcuts into clean, dedicated workspace cards.</string>
+    <string name="add_workspace">Add Workspace</string>
+    <string name="import_apps">Import Apps</string>
+    <string name="device_info">Device Info</string>
+    <string name="settings">Settings</string>
+    <string name="about">About</string>
+    <string name="data_management">Data Management</string>
+    <string name="privacy_policy">Privacy &amp; Local Storage</string>
+</resources>
